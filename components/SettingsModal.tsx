@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { SettingsIcon, EyeIcon, EyeOffIcon } from './icons';
 import { SyntaxTheme } from '../types';
@@ -51,7 +52,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
       setSyntaxTheme(currentSyntaxTheme);
       setIsKeyVisible(false);
 
-      // Reset update state when modal opens
       setUpdateStatus('idle');
       setUpdateInfo({});
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -70,7 +70,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
                   timeoutRef.current = window.setTimeout(() => {
                       setUpdateStatus('idle');
                       setUpdateInfo({});
-                  }, 10000); // Reset after 10 seconds
+                  }, 10000);
               }
           });
 
@@ -100,10 +100,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
 
   const handleUpdateClick = () => {
       if (!window.electronAPI) return;
-      if (updateStatus === 'idle' || updateStatus === 'error' || updateStatus === 'not-available') {
-          window.electronAPI.checkForUpdates();
-      } else if (updateStatus === 'downloaded') {
-          window.electronAPI.quitAndInstall();
+      
+      switch (updateStatus) {
+          case 'idle':
+          case 'error':
+          case 'not-available':
+              window.electronAPI.checkForUpdates();
+              break;
+          case 'available':
+              window.electronAPI.startUpdateDownload();
+              break;
+          case 'downloaded':
+              window.electronAPI.quitAndInstall();
+              break;
+          default:
+              // Do nothing while checking or downloading
       }
   }
   
@@ -118,7 +129,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
       switch (updateStatus) {
           case 'checking': return { text: 'Checking...', disabled: true, className: 'bg-slate-600' };
           case 'not-available': return { text: 'Latest Version', disabled: true, className: 'bg-slate-600' };
-          case 'available': return { text: `Downloading...`, disabled: true, className: 'bg-slate-600' };
+          case 'available': return { text: `Download Update ${updateInfo.version}`, disabled: false, className: 'bg-blue-600 hover:bg-blue-700' };
           case 'downloading': return { text: `Downloading... ${Math.round(updateInfo.progress?.percent || 0)}%`, disabled: true, className: 'bg-slate-600' };
           case 'downloaded': return { text: 'Restart to Update', disabled: false, className: 'bg-green-600 hover:bg-green-700' };
           case 'error': return { text: 'Update Error', disabled: false, className: 'bg-red-600 hover:bg-red-700' };

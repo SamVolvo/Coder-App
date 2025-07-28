@@ -1,3 +1,4 @@
+
 /// <reference types="vite/client" />
 import { Content } from '@google/genai';
 import { TreeNode, SyntaxTheme } from './types';
@@ -36,6 +37,7 @@ declare global {
       getAllowPrerelease: () => Promise<boolean>;
       setAllowPrerelease: (value: boolean) => Promise<void>;
       checkForUpdates: () => void;
+      startUpdateDownload: () => void;
       quitAndInstall: () => void;
       onUpdateStatus: (callback: (data: {
         status: 'idle' | 'checking' | 'not-available' | 'available' | 'downloading' | 'downloaded' | 'error';

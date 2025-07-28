@@ -1,3 +1,4 @@
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -33,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllowPrerelease: () => ipcRenderer.invoke('get-allow-prerelease'),
   setAllowPrerelease: (value) => ipcRenderer.invoke('set-allow-prerelease', value),
   checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+  startUpdateDownload: () => ipcRenderer.send('start-update-download'),
   quitAndInstall: () => ipcRenderer.send('quit-and-install'),
   onUpdateStatus: (callback) => {
     const listener = (event, data) => callback(data);

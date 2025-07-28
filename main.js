@@ -1,3 +1,4 @@
+
 const { app, BrowserWindow, ipcMain, Tray, Menu, shell, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
@@ -24,7 +25,10 @@ log.info('App starting...');
 const store = new Store();
 const allowPrerelease = store.get('allowPrerelease', false);
 autoUpdater.allowPrerelease = allowPrerelease;
-log.info(`Auto-updater configured with allowPrerelease: ${allowPrerelease}`);
+// This is the key fix for macOS. By disabling auto-download, we can control the flow
+// and prevent the OS from getting confused about replacing the running app bundle.
+autoUpdater.autoDownload = false;
+log.info(`Auto-updater configured with allowPrerelease: ${allowPrerelease}, autoDownload: false`);
 
 app.commandLine.appendSwitch('disable-features', 'Autofill');
 
@@ -69,8 +73,6 @@ function setupWatcher(projectRoot) {
     ignored: /(^|[\/\\])\..|node_modules|dist|build/, // ignore dotfiles, node_modules, etc.
     persistent: true,
     ignoreInitial: true,
-    // This option helps ensure that events are not emitted until files are fully written,
-    // which is crucial for reliability with editors like VS Code that perform complex saves.
     awaitWriteFinish: {
       stabilityThreshold: 500,
       pollInterval: 100,
@@ -188,8 +190,14 @@ ipcMain.on('check-for-updates', () => {
   if (app.isPackaged) autoUpdater.checkForUpdates();
 });
 
+ipcMain.on('start-update-download', () => {
+    log.info("IPC: 'start-update-download' received.");
+    autoUpdater.downloadUpdate();
+});
+
 ipcMain.on('quit-and-install', async () => {
     log.info("IPC: 'quit-and-install' received.");
+    app.isQuitting = true;
     if (process.platform === 'linux') {
         log.info("Platform is Linux. Showing manual restart dialog before quitting.");
         await dialog.showMessageBox(mainWindow, {
@@ -216,7 +224,7 @@ autoUpdater.on('update-not-available', (info) => {
 });
 
 autoUpdater.on('error', (err) => {
-  log.error('Error in auto-updater:', err); // Log the full error object for better debugging.
+  log.error('Error in auto-updater:', err);
   const errorMessage = (err instanceof Error ? err.message : String(err)) || 'An unknown error occurred';
   mainWindow?.webContents.send('update-status', { status: 'error', error: errorMessage });
 });
@@ -252,7 +260,11 @@ app.whenReady().then(() => {
     tray.setContextMenu(contextMenu);
     log.info('System tray created successfully.');
 
-    if (app.isPackaged) autoUpdater.checkForUpdatesAndNotify();
+    if (app.isPackaged) {
+      // Check silently on startup, but don't download.
+      // The user can trigger download from the settings UI.
+      autoUpdater.checkForUpdates();
+    }
   } catch(error) {
     log.error('Failed to create main window or tray:', error);
     if (app) app.quit();
