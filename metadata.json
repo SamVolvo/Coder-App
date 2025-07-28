@@ -1,0 +1,6 @@
+{
+  "name": "Coder App Desktop",
+  "description": "An AI-powered application that generates code snippets in various programming languages based on user prompts. Simply describe the functionality you need, choose a language, and let the AI do the rest.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
