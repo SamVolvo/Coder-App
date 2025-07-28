@@ -2,7 +2,7 @@
 
 Coder App is a powerful and intuitive desktop application that acts as your personal AI coding assistant. It leverages Google's Gemini AI to generate complete, multi-file code projects in various programming languages based on simple, natural language prompts. Whether you're prototyping a new idea, learning a new technology, or just looking to accelerate your workflow, Coder App helps you go from idea to code faster than ever before.
 
-![Coder App Screenshot](https://raw.githubusercontent.com/SamVolvo/Coder-App/main/assets/screenshot.png)
+![Coder App Screenshot](https://github.com/SamVolvo/Coder-App/blob/master/assets/screenshot.png?raw=true)
 
 ## Key Features
 
