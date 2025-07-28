@@ -1,7 +1,7 @@
 {
   "name": "coder-app",
   "productName": "Coder App",
-  "version": "1.2.2-pre",
+  "version": "1.2.3-pre",
   "description": "An AI-powered application that generates code snippets.",
   "homepage": "https://github.com/SamVolvo/Coder-App",
   "author": {
@@ -40,6 +40,7 @@
   "build": {
     "appId": "com.samvolvo.coder-app",
     "productName": "Coder App",
+    "artifactName": "${name}-${version}.${ext}",
     "compression": "maximum",
     "files": [
       "dist/**/*",

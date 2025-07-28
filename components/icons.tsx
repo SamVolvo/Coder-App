@@ -1,7 +1,40 @@
 
+
 import React from 'react';
 
 type IconProps = React.SVGProps<SVGSVGElement>;
+
+export const UserIcon: React.FC<IconProps> = (props) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    {...props}>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+        <circle cx="12" cy="7" r="4"></circle>
+  </svg>
+);
+
+export const RobotIcon: React.FC<IconProps> = (props) => (
+  <svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    {...props}>
+        <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+        <path d="M16 3a2 2 0 0 0-2-2H10a2 2 0 0 0-2 2v4h8V3z"></path>
+        <circle cx="7" cy="14" r="1"></circle>
+        <circle cx="17" cy="14" r="1"></circle>
+  </svg>
+);
 
 export const CodeIcon: React.FC<IconProps> = (props) => (
   <svg
@@ -80,6 +113,22 @@ export const ExclamationIcon: React.FC<IconProps> = (props) => (
         <circle cx="12" cy="12" r="10"></circle>
         <line x1="12" y1="8" x2="12" y2="12"></line>
         <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+);
+
+export const XIcon: React.FC<IconProps> = (props) => (
+    <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        {...props}
+    >
+        <line x1="18" y1="6" x2="6" y2="18"></line>
+        <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
 );
 
@@ -226,7 +275,7 @@ export const FolderOpenIcon: React.FC<IconProps> = (props) => (
       strokeLinejoin="round"
       {...props}
     >
-      <path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.09a2 2 0 0 1 1.71.99L8 6"></path>
+      <path d="m6 14 l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.09a2 2 0 0 1 1.71.99L8 6"></path>
     </svg>
 );
 

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import PromptForm from './components/PromptForm';
@@ -8,8 +10,10 @@ import Notification from './components/Notification';
 import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import SettingsModal from './components/SettingsModal';
+import ChatHistory from './components/ChatHistory';
 import { initializeChat, sendMessage, getChatHistory, endChatSession } from './services/geminiService';
 import { ModalType, ModalContext, TreeNode, SyntaxTheme } from './types';
+import { Content } from '@google/genai';
 
 const getLanguageFromFileName = (fileName: string | null): string => {
     if (!fileName) return 'plaintext';
@@ -44,6 +48,7 @@ const App: React.FC = () => {
   const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
   const [recentlyUpdatedPaths, setRecentlyUpdatedPaths] = useState<Set<string>>(new Set());
   const [readmeContent, setReadmeContent] = useState<string>('');
+  const [chatHistory, setChatHistory] = useState<Content[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +156,7 @@ const App: React.FC = () => {
     
     try {
       const history = await window.electronAPI.readChatHistory(projectRoot);
+      setChatHistory(history.concat({ role: 'user', parts: [{ text: prompt }] }));
       await initializeChat(history);
       
       const response = await sendMessage(prompt);
@@ -172,7 +178,10 @@ const App: React.FC = () => {
       await animateFileByFile();
       
       const newHistory = await getChatHistory();
-      if(newHistory) await window.electronAPI.writeChatHistory(projectRoot, newHistory);
+      if(newHistory) {
+          setChatHistory(newHistory);
+          await window.electronAPI.writeChatHistory(projectRoot, newHistory);
+      }
 
       if (response.readmeContent) {
           await window.electronAPI.writeFile(projectRoot, 'README.md', response.readmeContent);
@@ -198,14 +207,17 @@ const App: React.FC = () => {
       setNotification('Project updated successfully!');
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+      const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(message);
+      // Revert optimistic UI update on error
+      setChatHistory(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
       setOnAnimationComplete({ cb: null });
     }
   }, [projectRoot, refreshProject]);
 
-  const resetState = () => {
+  const resetState = useCallback(() => {
     endChatSession();
     setProjectRoot(null);
     setFileTree([]);
@@ -213,14 +225,23 @@ const App: React.FC = () => {
     setSelectedNodes(new Set());
     setRecentlyUpdatedPaths(new Set());
     setReadmeContent('');
+    setChatHistory([]);
     setError(null);
     setIsLoading(false);
     setNotification(null);
-  };
+  }, []);
 
   const handleNewProject = useCallback(() => {
-    resetState();
-  }, []);
+    if (!projectRoot) return;
+    setModalState({
+        type: 'confirm',
+        context: {
+            title: 'Close Project',
+            message: 'Are you sure you want to close the current project? You can reopen it at any time.',
+            onConfirm: resetState,
+        }
+    });
+  }, [projectRoot, resetState]);
   
   const handleOpenProject = useCallback(async () => {
     if (!window.electronAPI) return;
@@ -231,6 +252,7 @@ const App: React.FC = () => {
             setProjectRoot(rootPath);
             await refreshProject(rootPath);
             const history = await window.electronAPI.readChatHistory(rootPath);
+            setChatHistory(history);
             await initializeChat(history);
             setNotification("Project opened successfully.");
         }
@@ -243,14 +265,15 @@ const App: React.FC = () => {
 
   const handleAddNode = async (filePath: string, isFolder: boolean) => {
       clearIndicators();
+      if (!projectRoot) return;
       try {
           if (isFolder) {
-              await window.electronAPI.createFolder(projectRoot!, filePath);
+              await window.electronAPI.createFolder(projectRoot, filePath);
           } else {
-              await window.electronAPI.createFile(projectRoot!, filePath);
+              await window.electronAPI.createFile(projectRoot, filePath);
               setActiveFile(filePath);
           }
-          await refreshProject(projectRoot!);
+          await refreshProject(projectRoot);
       } catch (e) {
           setError(`Failed to create ${isFolder ? 'folder' : 'file'}: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -258,13 +281,14 @@ const App: React.FC = () => {
 
   const handleDeleteNodes = async (pathsToDelete: Set<string>) => {
       clearIndicators();
+      if (!projectRoot) return;
       try {
         for (const p of pathsToDelete) {
-            await window.electronAPI.deleteNode(projectRoot!, p);
+            await window.electronAPI.deleteNode(projectRoot, p);
         }
         if (pathsToDelete.has(activeFile!)) setActiveFile(null);
         setSelectedNodes(new Set());
-        await refreshProject(projectRoot!);
+        await refreshProject(projectRoot);
         setNotification(`${pathsToDelete.size} item(s) deleted.`);
       } catch(e) {
         setError(`Failed to delete items: ${e instanceof Error ? e.message : String(e)}`);
@@ -273,12 +297,13 @@ const App: React.FC = () => {
 
   const handleRenameNode = async (oldPath: string, newName: string) => {
       clearIndicators();
+      if (!projectRoot) return;
       const parentDir = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : '';
       const newRelativePath = parentDir ? `${parentDir}/${newName}` : newName;
       try {
-        await window.electronAPI.renameNode(projectRoot!, oldPath, newRelativePath);
+        await window.electronAPI.renameNode(projectRoot, oldPath, newRelativePath);
         if (activeFile === oldPath) setActiveFile(newRelativePath);
-        await refreshProject(projectRoot!);
+        await refreshProject(projectRoot);
         setNotification('Renamed successfully.');
       } catch (e) {
         setError(`Failed to rename: ${e instanceof Error ? e.message : String(e)}`);
@@ -287,14 +312,15 @@ const App: React.FC = () => {
   
   const handleMoveNodes = async (sourcePaths: string[], destinationPath: string | null) => {
     clearIndicators();
+    if (!projectRoot) return;
     try {
         for (const source of sourcePaths) {
             const baseName = source.split('/').pop()!;
             const newRelativePath = destinationPath ? `${destinationPath}/${baseName}` : baseName;
-            await window.electronAPI.renameNode(projectRoot!, source, newRelativePath);
+            await window.electronAPI.renameNode(projectRoot, source, newRelativePath);
         }
         setSelectedNodes(new Set());
-        await refreshProject(projectRoot!);
+        await refreshProject(projectRoot);
         setNotification('Items moved successfully.');
     } catch (e) {
         setError(`Failed to move items: ${e instanceof Error ? e.message : String(e)}`);
@@ -360,11 +386,17 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col font-sans" onClick={() => setSelectedNodes(new Set())}>
-      <Header onNewProject={handleNewProject} onOpenProject={handleOpenProject} onOpenSettings={() => setModalState({ type: 'settings', context: null})} />
+      <Header 
+        onNewProject={handleNewProject} 
+        onOpenProject={handleOpenProject} 
+        onOpenSettings={() => setModalState({ type: 'settings', context: null})}
+        isProjectOpen={isProjectOpen}
+      />
       
       <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto">
         <div className="w-full md:w-1/3 lg:w-1/4 flex flex-col gap-6" onClick={(e) => e.stopPropagation()}>
           <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isApiKeySet={isApiKeySet} />
+          <ChatHistory history={chatHistory} />
           <FileExplorer 
             fileTree={fileTree} 
             activeFile={activeFile} 
