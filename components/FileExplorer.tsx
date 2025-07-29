@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback } from 'react';
-import { FolderClosedIcon, FolderOpenIcon, FileCodeIcon, HtmlIcon, CssIcon, JsIcon, FilesIcon, FolderPlusIcon, PenLineIcon, TrashIcon, CopyDuplicateIcon, FilePlusIcon, DotIcon } from './icons';
+import { FolderClosedIcon, FolderOpenIcon, FileCodeIcon, HtmlIcon, CssIcon, JsIcon, FilesIcon, FolderPlusIcon, PenLineIcon, TrashIcon, CopyDuplicateIcon, FilePlusIcon, DotIcon, UploadIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import { TreeNode } from '../types';
@@ -8,6 +8,7 @@ import { TreeNode } from '../types';
 type OnNodeAction = (context: { path: string; isFolder: boolean }) => void;
 type OnPathAction = (path: string) => void;
 type OnContainerAction = (context: { path?: string }) => void;
+type OnVoidAction = () => void;
 
 interface FileExplorerProps {
   fileTree: TreeNode[];
@@ -18,6 +19,7 @@ interface FileExplorerProps {
   isLoading: boolean;
   onAddFolder: OnContainerAction;
   onAddFile: OnContainerAction;
+  onUploadFile: OnVoidAction;
   onDeleteNodes: (context: { paths: Set<string> }) => void;
   onRenameNode: OnNodeAction;
   onCopyPath: OnPathAction;
@@ -153,7 +155,7 @@ const TreeView: React.FC<TreeViewProps> = (props) => {
 };
 
 const FileExplorer: React.FC<FileExplorerProps> = (props) => {
-  const { fileTree, isLoading, onAddFolder, onAddFile, onDeleteNodes, onRenameNode, onCopyPath, onMoveNodes, projectRoot } = props;
+  const { fileTree, isLoading, onAddFolder, onAddFile, onDeleteNodes, onRenameNode, onCopyPath, onMoveNodes, projectRoot, onUploadFile } = props;
   const [openFolders, setOpenFolders] = useState(new Set<string>());
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, node: TreeNode | null } | null>(null);
   
@@ -203,6 +205,8 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
       return isFolder ? [...folderActions, ...commonActions] : commonActions;
     } else {
       return [
+        { type: 'action', label: 'Upload File', icon: UploadIcon, action: onUploadFile },
+        { type: 'separator' },
         { type: 'action', label: 'New File', icon: FilePlusIcon, action: () => onAddFile({}) },
         { type: 'action', label: 'New Folder', icon: FolderPlusIcon, action: () => onAddFolder({}) },
       ];
@@ -239,6 +243,32 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
         <div className="flex items-center">
             <FilesIcon className="w-5 h-5 mr-3 text-indigo-400" />
             <h3 className="text-md font-semibold text-slate-200">File Explorer</h3>
+        </div>
+        <div className="flex items-center gap-1">
+            <button
+                onClick={onUploadFile}
+                title="Upload File"
+                disabled={!projectRoot}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <UploadIcon className="w-4 h-4" />
+            </button>
+            <button
+                onClick={() => onAddFile({})}
+                title="New File"
+                disabled={!projectRoot}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <FilePlusIcon className="w-4 h-4" />
+            </button>
+            <button
+                onClick={() => onAddFolder({})}
+                title="New Folder"
+                disabled={!projectRoot}
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                <FolderPlusIcon className="w-4 h-4" />
+            </button>
         </div>
       </div>
       <div className="flex-grow overflow-auto" onContextMenu={(e) => handleContextMenu(e)} onDragOver={(e) => e.preventDefault()} onDrop={handleDropOnContainer}>

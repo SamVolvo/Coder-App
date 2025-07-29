@@ -70,6 +70,7 @@ const parseAIResponse = (response: GenerateContentResponse): { files: CodeFile[]
 export const initializeChat = async (history: Content[] = []) => {
     const aiInstance = await getAiInstance();
     const systemInstruction = `You are a world-class senior software engineer acting as a coding assistant.
+- You can analyze images provided by the user. If they provide a screenshot, use it as a strong visual reference for the UI you generate.
 - Your response MUST be a JSON object that strictly adheres to this schema: { "files": [{ "fileName": "...", "code": "..." }], "readmeContent": "..." }.
 - CRITICAL: For each file, "fileName" MUST be the full, relative path including directories. For example: 'src/components/Button.tsx' or 'css/styles.css'. This is a mandatory requirement.
 - "code" must be the raw, complete code for that file.
@@ -90,9 +91,14 @@ export const initializeChat = async (history: Content[] = []) => {
     });
 };
 
-export const sendMessage = async (prompt: string) => {
+export const sendMessage = async (userContent: Content) => {
   if (!chat) throw new Error("Chat not initialized.");
-  const response = await chat.sendMessage({ message: prompt });
+  // The API requires at least one part, and TypeScript complains if `parts` could be undefined.
+  const messageParts = userContent.parts;
+  if (!messageParts || messageParts.length === 0) {
+    throw new Error("Cannot send an empty message.");
+  }
+  const response = await chat.sendMessage({ message: messageParts });
   return parseAIResponse(response);
 };
 

@@ -1,27 +1,23 @@
+import { Content } from '@google/genai';
+
 export interface CodeFile {
   fileName: string; // This will now be a relative path
   code: string;
 }
 
-export type ModalType = 'none' | 'confirm' | 'settings' | 'rename' | 'newFile' | 'newFolder' | 'confirmDelete';
+export type ModalType = 'none' | 'confirm' | 'settings' | 'rename' | 'newFile' | 'newFolder' | 'confirmDelete' | 'confirmClose';
+
+// Specific context types for each modal
+export type NewNodeModalContext = { path?: string };
+export type RenameModalContext = { path: string; isFolder: boolean; initialValue: string };
+export type ConfirmDeleteModalContext = { paths: Set<string> };
+export type GenericConfirmModalContext = { title: string; message: string; onConfirm: () => void; };
 
 export type ModalContext = 
-  | { // for newFile, newFolder
-      path?: string; // parent directory path
-    }
-  | { // for rename
-      path: string;
-      isFolder: boolean;
-      initialValue: string;
-    }
-  | { // for confirmDelete
-      paths: Set<string>;
-    }
-  | { // for generic confirm
-      title: string;
-      message: string;
-      onConfirm: () => void;
-    }
+  | NewNodeModalContext
+  | RenameModalContext
+  | ConfirmDeleteModalContext
+  | GenericConfirmModalContext
   | null; // for modals that don't need context
 
 export type SyntaxTheme = 'vsc-dark-plus' | 'one-dark' | 'vs' | 'material-light';

@@ -1,8 +1,6 @@
 
-
 import React from 'react';
 import { FolderOpenIcon, SettingsIcon, XIcon } from './icons';
-import appIcon from '../assets/icon.png';
 
 interface HeaderProps {
     onNewProject: () => void;
@@ -17,7 +15,7 @@ const Header: React.FC<HeaderProps> = ({ onNewProject, onOpenProject, onOpenSett
       <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-                <img src={appIcon} alt="Coder App Logo" className="w-10 h-10 mr-3" />
+                <img src="./assets/icon.png" alt="Coder App Logo" className="w-10 h-10 mr-3" />
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
                     Coder App
                 </h1>

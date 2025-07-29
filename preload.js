@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   renameNode: (projectRoot, oldRelativePath, newRelativePath) => ipcRenderer.invoke('rename-node', projectRoot, oldRelativePath, newRelativePath),
   createFile: (projectRoot, relativePath) => ipcRenderer.invoke('create-file', projectRoot, relativePath),
   createFolder: (projectRoot, relativePath) => ipcRenderer.invoke('create-folder', projectRoot, relativePath),
+  uploadFile: (projectRoot) => ipcRenderer.invoke('upload-file', projectRoot),
   onProjectUpdate: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('project-updated', listener);

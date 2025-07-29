@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef } from 'react';
-import { Content } from '@google/genai';
+import { Content, Part } from '@google/genai';
 import { UserIcon, RobotIcon, SparklesIcon } from './icons';
 
 interface ChatHistoryProps {
@@ -13,6 +13,23 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ history }) => {
   useEffect(() => {
     endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [history]);
+
+  const renderUserMessagePart = (part: Part, index: number) => {
+    if (part.text) {
+      return <p key={index} className="text-sm text-slate-200">{part.text}</p>;
+    }
+    if (part.inlineData) {
+      return (
+        <img 
+          key={index}
+          src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`} 
+          alt="User attachment"
+          className="mt-2 rounded-md max-w-full h-auto border border-slate-600"
+        />
+      )
+    }
+    return null;
+  }
 
   const renderContent = () => {
     if (history.length === 0) {
@@ -30,8 +47,8 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ history }) => {
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
                 <UserIcon className="w-5 h-5 text-slate-300" />
             </div>
-            <div className="bg-slate-700 rounded-lg p-3 max-w-xs md:max-w-sm">
-              <p className="text-sm text-slate-200">{message.parts?.[0]?.text ?? ''}</p>
+            <div className="bg-slate-700 rounded-lg p-3 max-w-xs md:max-w-sm flex flex-col gap-2">
+              {message.parts?.map(renderUserMessagePart)}
             </div>
           </div>
         );

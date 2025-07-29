@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useCallback, useEffect } from 'react';
 import Header from './components/Header';
 import PromptForm from './components/PromptForm';
@@ -12,8 +14,8 @@ import InputModal from './components/InputModal';
 import SettingsModal from './components/SettingsModal';
 import ChatHistory from './components/ChatHistory';
 import { initializeChat, sendMessage, getChatHistory, endChatSession } from './services/geminiService';
-import { ModalType, ModalContext, TreeNode, SyntaxTheme } from './types';
-import { Content } from '@google/genai';
+import { ModalType, ModalContext, TreeNode, SyntaxTheme, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext } from './types';
+import { Content, Part } from '@google/genai';
 
 const getLanguageFromFileName = (fileName: string | null): string => {
     if (!fileName) return 'plaintext';
@@ -145,7 +147,7 @@ const App: React.FC = () => {
     loadContent();
   }, [activeFile, projectRoot]);
 
-  const handleSendMessage = useCallback(async (prompt: string) => {
+  const handleSendMessage = useCallback(async (prompt: string, imageBase64: string | null) => {
     if (!projectRoot) {
         setError("No project is open. Please open a folder first.");
         return;
@@ -156,10 +158,18 @@ const App: React.FC = () => {
     
     try {
       const history = await window.electronAPI.readChatHistory(projectRoot);
-      setChatHistory(history.concat({ role: 'user', parts: [{ text: prompt }] }));
+      
+      const userParts: Part[] = [{ text: prompt }];
+      if (imageBase64) {
+          // Assuming PNG for simplicity, can be improved to detect MIME type
+          userParts.push({ inlineData: { mimeType: 'image/png', data: imageBase64 } });
+      }
+      const userContent: Content = { role: 'user', parts: userParts };
+
+      setChatHistory(history.concat(userContent));
       await initializeChat(history);
       
-      const response = await sendMessage(prompt);
+      const response = await sendMessage(userContent);
       
       const updatedPaths = new Set<string>();
 
@@ -326,6 +336,21 @@ const App: React.FC = () => {
         setError(`Failed to move items: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
+  
+  const handleUploadFile = async () => {
+    clearIndicators();
+    if (!projectRoot) return;
+    try {
+        const uploadedFilePath = await window.electronAPI.uploadFile(projectRoot);
+        if (uploadedFilePath) {
+            await refreshProject(projectRoot);
+            setActiveFile(uploadedFilePath);
+            setNotification('File uploaded successfully!');
+        }
+    } catch (e) {
+        setError(`Failed to upload file: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   const handleSelectNode = (path: string, isCtrlOrMeta: boolean, isFolder: boolean) => {
     setSelectedNodes(prev => {
@@ -383,6 +408,34 @@ const App: React.FC = () => {
   const closeModal = () => setModalState({ type: 'none', context: null });
   const isApiKeySet = !!apiKey;
   const isProjectOpen = !!projectRoot;
+  
+  const renderModals = () => {
+    switch (modalState.type) {
+      case 'newFolder':
+      case 'newFile': {
+        const context = modalState.context as NewNodeModalContext;
+        const isFolder = modalState.type === 'newFolder';
+        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(name) => handleAddNode(context?.path ? `${context.path}/${name}` : name, isFolder)} title={isFolder ? 'Add New Folder' : 'Add New File'} message={`Enter name for the new ${isFolder ? 'folder' : 'file'}${context?.path ? ` in '${context.path}'` : ''}.`} placeholder={isFolder ? "e.g., components" : "e.g., Button.tsx"} submitButtonText={isFolder ? "Add Folder" : "Add File"}/>;
+      }
+      case 'rename': {
+        const context = modalState.context as RenameModalContext;
+        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(newName) => handleRenameNode(context.path, newName)} title={context.isFolder ? 'Rename Folder' : 'Rename File'} message="Enter the new name." placeholder="New name" submitButtonText="Rename" initialValue={context.initialValue}/>;
+      }
+      case 'confirm': {
+        const context = modalState.context as GenericConfirmModalContext;
+        return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={context.onConfirm} title={context.title} message={context.message}/>;
+      }
+      case 'confirmDelete': {
+        const context = modalState.context as ConfirmDeleteModalContext;
+        return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={() => handleDeleteNodes(context.paths)} title={`Delete ${context.paths.size} item(s)?`} message={`Are you sure? This action cannot be undone.`}/>;
+      }
+      case 'settings': {
+        return <SettingsModal isOpen={true} onClose={closeModal} onSave={handleSaveSettings} currentApiKey={apiKey} currentUseTypingEffect={useTypingEffect} currentSyntaxTheme={syntaxTheme} />;
+      }
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col font-sans" onClick={() => setSelectedNodes(new Set())}>
@@ -410,6 +463,7 @@ const App: React.FC = () => {
             onRenameNode={(context) => setModalState({ type: 'rename', context: { ...context, initialValue: context.path.split('/').pop() || '' } })}
             onCopyPath={handleCopyPath}
             onMoveNodes={handleMoveNodes}
+            onUploadFile={handleUploadFile}
             projectRoot={projectRoot}
           />
           <InstructionsDisplay instructions={readmeContent} isLoading={isLoading && !readmeContent && isProjectOpen} />
@@ -432,39 +486,7 @@ const App: React.FC = () => {
       
       {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
       
-      <SettingsModal 
-        isOpen={modalState.type === 'settings'} 
-        onClose={closeModal} 
-        onSave={handleSaveSettings} 
-        currentApiKey={apiKey} 
-        currentUseTypingEffect={useTypingEffect} 
-        currentSyntaxTheme={syntaxTheme} 
-      />
-
-      {modalState.type === 'newFolder' && (modalState.context && 'path' in modalState.context) && (() => {
-        const context = modalState.context as { path?: string };
-        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(name) => handleAddNode(context?.path ? `${context.path}/${name}` : name, true)} title="Add New Folder" message={`Enter name for the new folder${context?.path ? ` in '${context.path}'` : ''}.`} placeholder="e.g., components" submitButtonText="Add Folder"/>;
-      })()}
-      
-      {modalState.type === 'newFile' && (modalState.context && 'path' in modalState.context) && (() => {
-        const context = modalState.context as { path?: string };
-        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(name) => handleAddNode(context?.path ? `${context.path}/${name}` : name, false)} title="Add New File" message={`Enter name for the new file${context?.path ? ` in '${context.path}'` : ''}.`} placeholder="e.g., Button.tsx" submitButtonText="Add File"/>;
-      })()}
-
-      {modalState.type === 'rename' && (modalState.context && 'path' in modalState.context) && (() => {
-        const context = modalState.context as { path: string; isFolder: boolean; initialValue: string; };
-        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(newName) => handleRenameNode(context.path, newName)} title={context.isFolder ? 'Rename Folder' : 'Rename File'} message="Enter the new name." placeholder="New name" submitButtonText="Rename" initialValue={context.initialValue}/>;
-      })()}
-
-      {modalState.type === 'confirm' && (modalState.context && 'title' in modalState.context) && (() => {
-        const context = modalState.context as { title: string; message: string; onConfirm: () => void; };
-        return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={context.onConfirm} title={context.title} message={context.message}/>;
-      })()}
-      
-      {modalState.type === 'confirmDelete' && (modalState.context && 'paths' in modalState.context) && (() => {
-        const context = modalState.context as { paths: Set<string>; };
-        return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={() => handleDeleteNodes(context.paths)} title={`Delete ${context.paths.size} item(s)?`} message={`Are you sure? This action cannot be undone.`}/>;
-      })()}
+      {renderModals()}
     </div>
   );
 };

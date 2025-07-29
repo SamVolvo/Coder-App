@@ -1,5 +1,4 @@
 
-/// <reference types="vite/client" />
 import { Content } from '@google/genai';
 import { TreeNode, SyntaxTheme } from './types';
 
@@ -27,6 +26,7 @@ declare global {
       renameNode: (projectRoot: string, oldRelativePath: string, newRelativePath: string) => Promise<void>;
       createFile: (projectRoot: string, relativePath: string) => Promise<void>;
       createFolder: (projectRoot: string, relativePath: string) => Promise<void>;
+      uploadFile: (projectRoot: string) => Promise<string | null>;
       onProjectUpdate: (callback: () => void) => () => void; // Listener for external changes
 
       // Chat History

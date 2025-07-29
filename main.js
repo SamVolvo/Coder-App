@@ -25,10 +25,19 @@ log.info('App starting...');
 const store = new Store();
 const allowPrerelease = store.get('allowPrerelease', false);
 autoUpdater.allowPrerelease = allowPrerelease;
-// This is the key fix for macOS. By disabling auto-download, we can control the flow
+
+// This is a key fix for macOS. By disabling auto-download, we can control the flow
 // and prevent the OS from getting confused about replacing the running app bundle.
-autoUpdater.autoDownload = false;
-log.info(`Auto-updater configured with allowPrerelease: ${allowPrerelease}, autoDownload: false`);
+// For Windows and Linux, auto-download is generally safe and provides a smoother experience.
+if (process.platform === 'darwin') {
+  autoUpdater.autoDownload = false;
+  log.info('macOS detected, setting autoDownload to false.');
+} else {
+  autoUpdater.autoDownload = true;
+  log.info(`Platform is ${process.platform}, setting autoDownload to true.`);
+}
+log.info(`Auto-updater configured with allowPrerelease: ${allowPrerelease}`);
+
 
 app.commandLine.appendSwitch('disable-features', 'Autofill');
 
@@ -114,6 +123,29 @@ ipcMain.handle('open-project', async () => {
     return projectRoot;
 });
 
+ipcMain.handle('upload-file', async (event, projectRoot) => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile'],
+        title: 'Select a file to upload',
+    });
+    if (canceled || !filePaths.length) return null;
+
+    const sourcePath = filePaths[0];
+    const fileName = path.basename(sourcePath);
+    const destinationPath = path.join(projectRoot, fileName);
+    const relativePath = path.relative(projectRoot, destinationPath).replace(/\\/g, '/');
+
+    try {
+        const content = await fs.readFile(sourcePath); // Read as buffer to support all file types
+        await fs.writeFile(destinationPath, content);
+        log.info(`Uploaded file from ${sourcePath} to ${destinationPath}`);
+        return relativePath;
+    } catch (e) {
+        log.error(`Error uploading file:`, e);
+        throw e; // Rethrow to be caught by the renderer
+    }
+});
+
 const ignoredDirs = new Set(['node_modules', '.git', '.vscode', '__pycache__', 'dist', 'build', '.coder']);
 async function readProjectTree(currentPath, rootDir) {
     const results = [];
@@ -187,7 +219,13 @@ ipcMain.handle('write-chat-history', async (event, projectRoot, history) => {
 // --- Updater and Logging ---
 ipcMain.on('check-for-updates', () => {
   log.info("IPC: 'check-for-updates' received.");
-  if (app.isPackaged) autoUpdater.checkForUpdates();
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates().catch(err => {
+        // The UI will receive an 'error' status from the 'error' event listener,
+        // so we just need to log it here and prevent a crash.
+        log.error('Error during manual update check:', err);
+    });
+  }
 });
 
 ipcMain.on('start-update-download', () => {
@@ -263,7 +301,11 @@ app.whenReady().then(() => {
     if (app.isPackaged) {
       // Check silently on startup, but don't download.
       // The user can trigger download from the settings UI.
-      autoUpdater.checkForUpdates();
+      autoUpdater.checkForUpdates().catch(err => {
+        // This is a silent check, so we'll just log the error.
+        // The user can manually check for updates later.
+        log.error('Error during startup update check:', err);
+      });
     }
   } catch(error) {
     log.error('Failed to create main window or tray:', error);
