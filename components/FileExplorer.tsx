@@ -94,7 +94,7 @@ const TreeView: React.FC<TreeViewProps> = (props) => {
         
         let nodeBgClass = 'text-slate-300 hover:bg-slate-700';
         if (isActive) nodeBgClass = 'bg-indigo-600 text-white';
-        else if (isSelected) nodeBgClass = 'bg-slate-600/50 text-slate-200';
+        else if (isSelected) nodeBgClass = 'bg-slate-600 text-white';
         if (dragOverPath === node.path) nodeBgClass += ' outline outline-2 outline-indigo-500';
         
         const isUpdated = rest.recentlyUpdatedPaths.has(node.path);
@@ -123,7 +123,7 @@ const TreeView: React.FC<TreeViewProps> = (props) => {
                     </span>
                     <span className="truncate">{node.name}</span>
                 </div>
-                {isUpdated && <DotIcon className="w-2 h-2 text-indigo-400 flex-shrink-0 animate-pulse" />}
+                {isUpdated && <DotIcon className="w-2 h-2 text-indigo-500 flex-shrink-0 animate-pulse" />}
               </div>
               {isOpen && <TreeView tree={node.children} level={level + 1} {...rest} />}
             </li>
@@ -145,7 +145,7 @@ const TreeView: React.FC<TreeViewProps> = (props) => {
                 <FileIcon className="w-4 h-4 mr-3 flex-shrink-0" />
                 <span className="truncate">{node.name}</span>
               </div>
-              {isUpdated && <DotIcon className="w-2 h-2 text-indigo-400 flex-shrink-0 animate-pulse" />}
+              {isUpdated && <DotIcon className="w-2 h-2 text-indigo-500 flex-shrink-0 animate-pulse" />}
             </li>
           );
         }
@@ -238,8 +238,8 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
   };
 
   return (
-    <div className="bg-slate-800 rounded-lg shadow-lg flex-grow flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between bg-slate-900/50 px-4 py-2 border-b border-slate-700 flex-shrink-0">
+    <div className="bg-slate-800 rounded-lg shadow-lg h-80 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between bg-slate-900 px-4 py-2 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center">
             <FilesIcon className="w-5 h-5 mr-3 text-indigo-400" />
             <h3 className="text-md font-semibold text-slate-200">File Explorer</h3>

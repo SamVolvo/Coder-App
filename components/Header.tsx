@@ -11,7 +11,7 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onNewProject, onOpenProject, onOpenSettings, isProjectOpen }) => {
   return (
-    <header className="bg-slate-900/70 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-700">
+    <header className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-700">
       <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
@@ -40,7 +40,7 @@ const Header: React.FC<HeaderProps> = ({ onNewProject, onOpenProject, onOpenSett
                     onClick={onNewProject}
                     title={isProjectOpen ? "Close current project" : "No project open"}
                     disabled={!isProjectOpen}
-                    className="inline-flex items-center justify-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-200 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-300 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <XIcon className="w-5 h-5 mr-2 -ml-1" />
                     Close Project

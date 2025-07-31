@@ -71,7 +71,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
               onClose();
             }}
             disabled={item.disabled}
-            className="w-full flex items-center text-left px-3 py-2 text-sm text-slate-200 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-200"
+            className="w-full flex items-center text-left px-3 py-2 text-sm text-slate-300 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-300"
             role="menuitem"
           >
             {Icon && <Icon className="w-4 h-4 mr-3" />}

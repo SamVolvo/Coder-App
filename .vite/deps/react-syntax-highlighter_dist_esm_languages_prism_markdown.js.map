@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/react-syntax-highlighter/dist/esm/languages/prism/markdown.js"],
+  "sourcesContent": ["import markdown from \"refractor/lang/markdown.js\";\n;\nexport default markdown;"],
+  "mappings": ";;;;;;;;AAAA,sBAAqB;AAErB,IAAO,mBAAQ,gBAAAA;",
+  "names": ["markdown"]
+}

@@ -1,8 +1,5 @@
 
-
-
-
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import PromptForm from './components/PromptForm';
 import CodeDisplay from './components/CodeDisplay';
@@ -51,6 +48,7 @@ const App: React.FC = () => {
   const [recentlyUpdatedPaths, setRecentlyUpdatedPaths] = useState<Set<string>>(new Set());
   const [readmeContent, setReadmeContent] = useState<string>('');
   const [chatHistory, setChatHistory] = useState<Content[]>([]);
+  const [isChatHistoryCollapsed, setIsChatHistoryCollapsed] = useState(false);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +56,8 @@ const App: React.FC = () => {
   const [modalState, setModalState] = useState<{ type: ModalType; context: ModalContext }>({ type: 'none', context: null });
   const [onAnimationComplete, setOnAnimationComplete] = useState<{ cb: (() => void) | null }>({ cb: null });
   
+  const debounceWriteFileRef = useRef<number | null>(null);
+
   const refreshProject = useCallback(async (root: string) => {
     if (!window.electronAPI) return;
     try {
@@ -394,15 +394,22 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCodeChange = async (newCode: string) => {
+  const debouncedWriteFile = useCallback((projectR: string, fileP: string, content: string) => {
+    if (debounceWriteFileRef.current) clearTimeout(debounceWriteFileRef.current);
+    debounceWriteFileRef.current = window.setTimeout(async () => {
+        try {
+            await window.electronAPI.writeFile(projectR, fileP, content);
+        } catch (e) {
+            setError(`Failed to save file: ${e instanceof Error ? e.message : String(e)}`);
+        }
+    }, 300);
+  }, []);
+
+  const handleCodeChange = (newCode: string) => {
     clearIndicators();
     if (!activeFile || !projectRoot) return;
     setActiveFileContent(newCode); // Update UI immediately
-    try {
-      await window.electronAPI.writeFile(projectRoot, activeFile, newCode);
-    } catch (e) {
-      setError(`Failed to save file: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    debouncedWriteFile(projectRoot, activeFile, newCode);
   };
   
   const closeModal = () => setModalState({ type: 'none', context: null });
@@ -438,7 +445,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans" onClick={() => setSelectedNodes(new Set())}>
+    <div className="min-h-screen flex flex-col font-sans bg-gray-900" onClick={() => setSelectedNodes(new Set())}>
       <Header 
         onNewProject={handleNewProject} 
         onOpenProject={handleOpenProject} 
@@ -449,7 +456,11 @@ const App: React.FC = () => {
       <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto">
         <div className="w-full md:w-1/3 lg:w-1/4 flex flex-col gap-6" onClick={(e) => e.stopPropagation()}>
           <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isApiKeySet={isApiKeySet} />
-          <ChatHistory history={chatHistory} />
+          <ChatHistory 
+            history={chatHistory} 
+            isCollapsed={isChatHistoryCollapsed}
+            onToggleCollapse={() => setIsChatHistoryCollapsed(v => !v)}
+          />
           <FileExplorer 
             fileTree={fileTree} 
             activeFile={activeFile} 

@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/react-syntax-highlighter/dist/esm/languages/prism/rust.js"],
+  "sourcesContent": ["import rust from \"refractor/lang/rust.js\";\n;\nexport default rust;"],
+  "mappings": ";;;;;;;;AAAA,kBAAiB;AAEjB,IAAO,eAAQ,YAAAA;",
+  "names": ["rust"]
+}

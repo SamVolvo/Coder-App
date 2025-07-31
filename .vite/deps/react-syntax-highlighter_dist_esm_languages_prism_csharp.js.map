@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../node_modules/react-syntax-highlighter/dist/esm/languages/prism/csharp.js"],
+  "sourcesContent": ["import csharp from \"refractor/lang/csharp.js\";\n;\nexport default csharp;"],
+  "mappings": ";;;;;;;;AAAA,oBAAmB;AAEnB,IAAO,iBAAQ,cAAAA;",
+  "names": ["csharp"]
+}

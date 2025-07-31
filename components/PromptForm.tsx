@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { SparklesIcon, PaperclipIcon, XIcon } from './icons';
 
@@ -71,7 +72,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSes
           className="absolute inset-0 bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center p-4 text-center rounded-lg"
           title="Please set your API key in the settings menu."
         >
-          <p className="text-slate-300">API Key required. Please configure it in the Settings.</p>
+          <p className="text-slate-400">API Key required. Please configure it in the Settings.</p>
         </div>
       )}
       <form onSubmit={handleSubmit} className="flex flex-col">
@@ -88,7 +89,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSes
             <button
               type="button"
               onClick={removeImage}
-              className="absolute -top-2 -right-2 bg-slate-700 rounded-full p-1 text-slate-300 hover:bg-red-500 hover:text-white transition-colors"
+              className="absolute -top-2 -right-2 bg-slate-600 rounded-full p-1 text-slate-300 hover:bg-red-500 hover:text-white transition-colors"
               title="Remove image"
             >
               <XIcon className="w-4 h-4" />
@@ -101,7 +102,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSes
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={placeholder}
-          className="w-full bg-slate-900 border border-slate-700 rounded-md p-3 text-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200 resize-none"
+          className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-slate-200 placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200 resize-none"
           rows={image ? 4 : 8}
           disabled={isFormDisabled}
         ></textarea>
@@ -119,7 +120,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSes
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isFormDisabled}
-                className="inline-flex items-center justify-center px-4 py-3 border border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-200 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center justify-center px-4 py-3 border border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-300 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Attach an image to your prompt"
             >
                 <PaperclipIcon className="w-5 h-5"/>
@@ -127,7 +128,7 @@ const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSes
             <button
               type="submit"
               disabled={isFormDisabled || (!prompt.trim() && !image)}
-              className="flex-grow inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 disabled:bg-slate-600 disabled:cursor-not-allowed transition-colors duration-200"
+              className="flex-grow inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-colors duration-200"
             >
               {isLoading ? (
                 'Generating...'

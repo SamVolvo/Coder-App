@@ -1,9 +1,42 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 import { CopyIcon, CheckIcon, CodeIcon, ExclamationIcon } from './icons';
-import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism';
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs, oneDark, materialLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { SyntaxTheme } from '../types';
+
+// --- Language Registration ---
+// By using PrismLight, we need to manually register the languages we want to support.
+// This keeps the bundle size down.
+import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx';
+import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript';
+import python from 'react-syntax-highlighter/dist/esm/languages/prism/python';
+import java_lang from 'react-syntax-highlighter/dist/esm/languages/prism/java';
+import csharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp';
+import go from 'react-syntax-highlighter/dist/esm/languages/prism/go';
+import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust';
+import css from 'react-syntax-highlighter/dist/esm/languages/prism/css';
+import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql';
+import json from 'react-syntax-highlighter/dist/esm/languages/prism/json';
+import markdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown';
+import clike from 'react-syntax-highlighter/dist/esm/languages/prism/clike';
+
+SyntaxHighlighter.registerLanguage('javascript', jsx);
+SyntaxHighlighter.registerLanguage('jsx', jsx);
+SyntaxHighlighter.registerLanguage('typescript', typescript);
+SyntaxHighlighter.registerLanguage('tsx', typescript);
+SyntaxHighlighter.registerLanguage('python', python);
+SyntaxHighlighter.registerLanguage('java', java_lang);
+SyntaxHighlighter.registerLanguage('csharp', csharp);
+SyntaxHighlighter.registerLanguage('go', go);
+SyntaxHighlighter.registerLanguage('rust', rust);
+SyntaxHighlighter.registerLanguage('html', jsx); // HTML is handled by the markup in JSX
+SyntaxHighlighter.registerLanguage('css', css);
+SyntaxHighlighter.registerLanguage('sql', sql);
+SyntaxHighlighter.registerLanguage('json', json);
+SyntaxHighlighter.registerLanguage('markdown', markdown);
+SyntaxHighlighter.registerLanguage('plaintext', clike); // A basic fallback
 
 type LineState = 'added' | 'modified' | 'unchanged';
 interface DisplayLine {
@@ -54,75 +87,75 @@ const diffLines = (oldText: string, newText: string): DisplayLine[] => {
 
 const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, language, fileName, hasFiles, onCodeChange, useTypingEffect, syntaxTheme, onAnimationComplete }) => {
   const [isCopied, setIsCopied] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [displayedContent, setDisplayedContent] = useState<DisplayLine[]>([]);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   
   const animationTimeoutRef = useRef<number | null>(null);
-  const debounceTimeoutRef = useRef<number | null>(null);
-  const oldCode = usePreviousPerKey(code, fileName);
+  const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
   
+  const normalizedCode = useMemo(() => code.replace(/\r\n/g, '\n'), [code]);
+  const oldCode = usePreviousPerKey(normalizedCode, fileName);
+
   const cancelAnimation = useCallback(() => {
     if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current);
   }, []);
 
-  const debouncedCodeChange = useCallback((newCode: string) => {
-      if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-      debounceTimeoutRef.current = window.setTimeout(() => {
-          onCodeChange(newCode);
-      }, 500); // 500ms debounce
-  }, [onCodeChange]);
-
   useEffect(() => {
-    setIsEditing(false);
-    cancelAnimation();
-    setIsAnimating(false);
-  }, [fileName, cancelAnimation]);
-
-  useEffect(() => {
-    const shouldAnimate = useTypingEffect && isLoading && onAnimationComplete;
-
-    if (shouldAnimate) {
-      cancelAnimation();
-      setIsAnimating(true);
-      
-      const diff = diffLines(oldCode || '', code);
-      const linesToAnimate = diff.map(line => ({ ...line, words: line.text.split(/(\s+)/).filter(Boolean) }));
-      let animatedLines = diff.map(l => ({ text: '', state: l.state }));
-      setDisplayedContent(animatedLines);
-
-      let lineIndex = 0;
-      let wordIndex = 0;
-
-      const typeWord = () => {
-          if (lineIndex >= linesToAnimate.length) {
-              setDisplayedContent(diff);
-              setIsAnimating(false);
-              onAnimationComplete?.();
-              return;
-          }
-          const currentLine = linesToAnimate[lineIndex];
-          if (wordIndex >= currentLine.words.length) {
-              lineIndex++;
-              wordIndex = 0;
-              animationTimeoutRef.current = window.setTimeout(typeWord, 50);
-              return;
-          }
-          animatedLines[lineIndex].text += currentLine.words[wordIndex];
-          setDisplayedContent([...animatedLines]);
-          wordIndex++;
-          animationTimeoutRef.current = window.setTimeout(typeWord, Math.random() * 35 + 15);
-      };
-      
-      typeWord();
-    } else if (!isAnimating) {
-        cancelAnimation();
-        setDisplayedContent(diffLines(oldCode || '', code));
+    if (isEditing) {
+        editTextAreaRef.current?.focus();
     }
-    
+  }, [isEditing]);
+
+  useEffect(() => {
+    // This effect handles updates from props (e.g., new file selected, AI update)
+    // It will not run on user input because `editText` is not a dependency
+    if (normalizedCode !== editText) {
+      const shouldAnimate = useTypingEffect && isLoading && onAnimationComplete;
+      cancelAnimation();
+      setIsEditing(false); // Always exit edit mode on external change
+
+      if (shouldAnimate) {
+        setIsAnimating(true);
+        const diff = diffLines(oldCode || '', normalizedCode);
+        const linesToAnimate = diff.map(line => ({ ...line, words: line.text.split(/(\s+)/).filter(Boolean) }));
+        let animatedLines = diff.map(l => ({ text: '', state: l.state }));
+        setDisplayedContent(animatedLines);
+        let lineIndex = 0;
+        let wordIndex = 0;
+        const typeWord = () => {
+            if (lineIndex >= linesToAnimate.length) {
+                setDisplayedContent(diff);
+                setEditText(normalizedCode);
+                setIsAnimating(false);
+                onAnimationComplete?.();
+                return;
+            }
+            const currentLine = linesToAnimate[lineIndex];
+            if (wordIndex >= currentLine.words.length) {
+                lineIndex++;
+                wordIndex = 0;
+                animationTimeoutRef.current = window.setTimeout(typeWord, 25);
+                return;
+            }
+            animatedLines[lineIndex].text += currentLine.words[wordIndex];
+            const newText = animatedLines.map(l => l.text).join('\n');
+            setDisplayedContent([...animatedLines]);
+            setEditText(newText);
+            wordIndex++;
+            animationTimeoutRef.current = window.setTimeout(typeWord, Math.random() * 17.5 + 7.5);
+        };
+        typeWord();
+      } else {
+          setIsAnimating(false);
+          const diff = diffLines(oldCode || '', normalizedCode);
+          setDisplayedContent(diff);
+          setEditText(normalizedCode);
+      }
+    }
     return () => { cancelAnimation(); };
-  }, [code, fileName, isLoading, useTypingEffect, onAnimationComplete, oldCode, cancelAnimation]);
+  }, [normalizedCode, oldCode, fileName, isLoading, useTypingEffect, onAnimationComplete, cancelAnimation]);
 
   useEffect(() => {
     if (isCopied) {
@@ -131,34 +164,38 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
     }
   }, [isCopied]);
   
-  useEffect(() => { setIsCopied(false); }, [code, fileName]);
-
-  const handleBlur = () => {
-    setIsEditing(false);
-    // Final save on blur, cancelling any pending debounce
-    if (debounceTimeoutRef.current) clearTimeout(debounceTimeoutRef.current);
-    if(editText !== code) onCodeChange(editText);
-  };
-
-  const handleClickToEdit = () => {
-    if (fileName && !isAnimating) {
-        setEditText(code);
-        setIsEditing(true);
-    }
+  useEffect(() => { setIsCopied(false); setIsEditing(false); }, [fileName]);
+  
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value.replace(/\r\n/g, '\n');
+    setEditText(newText);
+    const diff = diffLines(oldCode || '', newText);
+    setDisplayedContent(diff);
+    onCodeChange(newText);
   };
   
-  const handleTextAreaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setEditText(e.target.value);
-      debouncedCodeChange(e.target.value);
-  }
-
   const getLineClassName = (state: LineState) => {
     switch(state) {
-      case 'added': return 'bg-green-500/10';
-      case 'modified': return 'bg-yellow-500/10';
+      case 'added': return 'bg-emerald-900/50';
+      case 'modified': return 'bg-amber-900/50';
       default: return '';
     }
   }
+  
+  const editorSharedStyles: React.CSSProperties = {
+    fontFamily: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`,
+    fontSize: '14px',
+    lineHeight: 1.5,
+    padding: '1rem',
+    boxSizing: 'border-box',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+    margin: 0,
+    border: 'none',
+    width: '100%',
+    height: '100%',
+    overflow: 'auto',
+  };
 
   const renderContent = () => {
     if (isLoading && !hasFiles) {
@@ -174,13 +211,13 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
         <div className="flex flex-col items-center justify-center h-full text-red-400 p-4">
           <ExclamationIcon className="w-16 h-16 mb-4" />
           <p className="text-xl font-semibold mb-2">Error</p>
-          <p className="text-center text-red-300">{error}</p>
+          <p className="text-center">{error}</p>
         </div>
       );
     }
     if (!fileName) {
       return (
-        <div className="flex flex-col items-center justify-center h-full text-slate-500 p-4 text-center">
+        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
           <CodeIcon className="w-24 h-24 mb-4" />
           <p className="text-xl font-medium">
             {hasFiles ? 'Select a file to view its content' : 'Open a project to get started'}
@@ -188,55 +225,66 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
         </div>
       );
     }
-
-    if (isEditing) {
-        return (
-            <textarea
-              className="w-full h-full p-4 font-mono text-sm bg-slate-900 text-slate-200 resize-none focus:outline-none"
-              value={editText}
-              onChange={handleTextAreaChange}
-              onBlur={handleBlur}
-              spellCheck="false"
-              aria-label={`Code editor for ${fileName}`}
-              autoFocus
-            />
-        );
-    }
     
-    const codeToDisplay = displayedContent.map(l => l.text).join('\n');
+    if (isEditing) {
+      return (
+        <textarea
+          ref={editTextAreaRef}
+          value={editText}
+          onChange={handleTextChange}
+          onBlur={() => setIsEditing(false)}
+          spellCheck="false"
+          autoCapitalize="off"
+          autoComplete="off"
+          autoCorrect="off"
+          className="resize-none focus:outline-none bg-transparent text-slate-200"
+          style={{
+            ...editorSharedStyles,
+            caretColor: '#e2e8f0', // slate-200
+          }}
+        />
+      );
+    }
+
+    const codeForHighlighter = isAnimating ? displayedContent.map(l => l.text).join('\n') : editText;
 
     return (
-      <div className={`overflow-auto w-full h-full ${isAnimating ? 'cursor-default' : 'cursor-text'}`} onClick={handleClickToEdit}>
-        <SyntaxHighlighter
-          language={language}
-          style={themeMap[syntaxTheme] || vscDarkPlus}
-          customStyle={{ background: 'transparent', margin: 0, padding: '1rem' }}
-          codeTagProps={{ style: { fontFamily: 'inherit' } }}
-          wrapLines={true}
-          lineProps={(lineNumber: number) => {
-            const state = displayedContent[lineNumber - 1]?.state || 'unchanged';
-            const className = `transition-colors duration-300 ${getLineClassName(state)}`;
-            return { className, style: { display: 'block' } };
-          }}
+        <div 
+          className="w-full h-full cursor-text"
+          onClick={() => !isAnimating && setIsEditing(true)}
         >
-          {codeToDisplay}
-        </SyntaxHighlighter>
-      </div>
+            <SyntaxHighlighter
+                language={language}
+                style={themeMap[syntaxTheme] || vscDarkPlus}
+                customStyle={{...editorSharedStyles, background: 'transparent'}}
+                codeTagProps={{ style: { fontFamily: 'inherit', display: 'block' } }}
+                wrapLines={true}
+                wrapLongLines={true}
+                lineProps={(lineNumber: number) => {
+                    // In edit mode, don't show highlights. Show them during animation or static display.
+                    const state = displayedContent[lineNumber - 1]?.state || 'unchanged';
+                    const className = `transition-colors duration-300 ${getLineClassName(state)}`;
+                    return { className, style: { display: 'block' } };
+                }}
+            >
+                {codeForHighlighter + '\n'}
+            </SyntaxHighlighter>
+        </div>
     );
   };
 
   return (
-    <div className="bg-slate-800 rounded-lg shadow-lg flex-grow flex flex-col relative overflow-hidden h-full">
-        <div className="flex items-center justify-between bg-slate-900/50 px-4 py-2 border-b border-slate-700">
-            <span className="text-sm font-medium text-slate-300 truncate">{fileName || 'No file selected'}</span>
+    <div className="bg-slate-900 rounded-lg shadow-lg flex-grow flex flex-col relative overflow-hidden">
+        <div className="flex items-center justify-between bg-slate-800 px-4 py-2 border-b border-slate-700">
+            <span className="text-sm font-medium text-slate-400 truncate">{fileName || 'No file selected'}</span>
             {code && !error && (
-                 <button onClick={() => { navigator.clipboard.writeText(code); setIsCopied(true); }}
+                 <button onClick={() => { navigator.clipboard.writeText(normalizedCode); setIsCopied(true); }}
                     className="flex items-center text-sm px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors duration-200" >
                     {isCopied ? <><CheckIcon className="w-4 h-4 mr-1.5 text-green-400" />Copied!</> : <><CopyIcon className="w-4 h-4 mr-1.5" />Copy</>}
                 </button>
             )}
         </div>
-        <div className="flex-grow relative">
+        <div className="flex-grow relative font-mono text-sm">
            {renderContent()}
         </div>
     </div>
