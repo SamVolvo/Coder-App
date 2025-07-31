@@ -94,6 +94,7 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
   
   const animationTimeoutRef = useRef<number | null>(null);
   const editTextAreaRef = useRef<HTMLTextAreaElement>(null);
+  const internalUpdateRef = useRef(false);
   
   const normalizedCode = useMemo(() => code.replace(/\r\n/g, '\n'), [code]);
   const oldCode = usePreviousPerKey(normalizedCode, fileName);
@@ -109,53 +110,65 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
   }, [isEditing]);
 
   useEffect(() => {
-    // This effect handles updates from props (e.g., new file selected, AI update)
-    // It will not run on user input because `editText` is not a dependency
-    if (normalizedCode !== editText) {
-      const shouldAnimate = useTypingEffect && isLoading && onAnimationComplete;
-      cancelAnimation();
-      setIsEditing(false); // Always exit edit mode on external change
-
-      if (shouldAnimate) {
-        setIsAnimating(true);
-        const diff = diffLines(oldCode || '', normalizedCode);
-        const linesToAnimate = diff.map(line => ({ ...line, words: line.text.split(/(\s+)/).filter(Boolean) }));
-        let animatedLines = diff.map(l => ({ text: '', state: l.state }));
-        setDisplayedContent(animatedLines);
-        let lineIndex = 0;
-        let wordIndex = 0;
-        const typeWord = () => {
-            if (lineIndex >= linesToAnimate.length) {
-                setDisplayedContent(diff);
-                setEditText(normalizedCode);
-                setIsAnimating(false);
-                onAnimationComplete?.();
-                return;
-            }
-            const currentLine = linesToAnimate[lineIndex];
-            if (wordIndex >= currentLine.words.length) {
-                lineIndex++;
-                wordIndex = 0;
-                animationTimeoutRef.current = window.setTimeout(typeWord, 25);
-                return;
-            }
-            animatedLines[lineIndex].text += currentLine.words[wordIndex];
-            const newText = animatedLines.map(l => l.text).join('\n');
-            setDisplayedContent([...animatedLines]);
-            setEditText(newText);
-            wordIndex++;
-            animationTimeoutRef.current = window.setTimeout(typeWord, Math.random() * 17.5 + 7.5);
-        };
-        typeWord();
-      } else {
-          setIsAnimating(false);
-          const diff = diffLines(oldCode || '', normalizedCode);
-          setDisplayedContent(diff);
-          setEditText(normalizedCode);
-      }
+    // If the update came from this component's textarea, the ref will be true.
+    // We skip this effect run to prevent an infinite loop and allow the user to continue typing.
+    // We then reset the flag for the next potential external update.
+    if (internalUpdateRef.current) {
+        internalUpdateRef.current = false;
+        return;
     }
+
+    // This effect handles updates from props (e.g., new file selected, AI update)
+    // It should not run if the code from props is the same as the local editor text
+    if (normalizedCode === editText.replace(/\r\n/g, '\n')) {
+        return;
+    }
+    
+    const shouldAnimate = useTypingEffect && isLoading && onAnimationComplete;
+    cancelAnimation();
+    setIsEditing(false); // Always exit edit mode on a genuine external change
+
+    if (shouldAnimate) {
+      setIsAnimating(true);
+      const diff = diffLines(oldCode || '', normalizedCode);
+      const linesToAnimate = diff.map(line => ({ ...line, words: line.text.split(/(\s+)/).filter(Boolean) }));
+      let animatedLines = diff.map(l => ({ text: '', state: l.state }));
+      setDisplayedContent(animatedLines);
+      let lineIndex = 0;
+      let wordIndex = 0;
+      const typeWord = () => {
+          if (lineIndex >= linesToAnimate.length) {
+              setDisplayedContent(diff);
+              setEditText(normalizedCode);
+              setIsAnimating(false);
+              onAnimationComplete?.();
+              return;
+          }
+          const currentLine = linesToAnimate[lineIndex];
+          if (wordIndex >= currentLine.words.length) {
+              lineIndex++;
+              wordIndex = 0;
+              animationTimeoutRef.current = window.setTimeout(typeWord, 25);
+              return;
+          }
+          animatedLines[lineIndex].text += currentLine.words[wordIndex];
+          const newText = animatedLines.map(l => l.text).join('\n');
+          setDisplayedContent([...animatedLines]);
+          setEditText(newText);
+          wordIndex++;
+          animationTimeoutRef.current = window.setTimeout(typeWord, Math.random() * 17.5 + 7.5);
+      };
+      typeWord();
+    } else {
+        setIsAnimating(false);
+        const diff = diffLines(oldCode || '', normalizedCode);
+        setDisplayedContent(diff);
+        setEditText(normalizedCode);
+    }
+    
     return () => { cancelAnimation(); };
   }, [normalizedCode, oldCode, fileName, isLoading, useTypingEffect, onAnimationComplete, cancelAnimation]);
+
 
   useEffect(() => {
     if (isCopied) {
@@ -167,11 +180,14 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
   useEffect(() => { setIsCopied(false); setIsEditing(false); }, [fileName]);
   
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value.replace(/\r\n/g, '\n');
+    // Flag that this update is from user input, not an external prop change.
+    internalUpdateRef.current = true;
+    const newText = e.target.value; // Keep original line endings for the textarea
     setEditText(newText);
-    const diff = diffLines(oldCode || '', newText);
+    const normalizedNewText = newText.replace(/\r\n/g, '\n');
+    const diff = diffLines(oldCode || '', normalizedNewText);
     setDisplayedContent(diff);
-    onCodeChange(newText);
+    onCodeChange(normalizedNewText);
   };
   
   const getLineClassName = (state: LineState) => {
@@ -246,7 +262,7 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, langu
       );
     }
 
-    const codeForHighlighter = isAnimating ? displayedContent.map(l => l.text).join('\n') : editText;
+    const codeForHighlighter = isAnimating ? displayedContent.map(l => l.text).join('\n') : editText.replace(/\r\n/g, '\n');
 
     return (
         <div 

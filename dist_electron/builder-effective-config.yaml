@@ -1,0 +1,38 @@
+directories:
+  output: dist_electron
+  buildResources: assets
+appId: com.samvolvo.coder-app
+productName: Coder App
+artifactName: ${name}-${version}.${ext}
+compression: maximum
+files:
+  - filter:
+      - dist/**/*
+      - main.js
+      - preload.js
+      - package.json
+      - assets/**/*
+publish:
+  provider: github
+  owner: SamVolvo
+  repo: Coder-App
+win:
+  target: nsis
+  icon: assets/icon.ico
+mac:
+  target:
+    - dmg
+    - zip
+  icon: assets/icon.png
+linux:
+  target:
+    - AppImage
+    - deb
+    - rpm
+  category: Development
+  maintainer: SamVolvo
+  icon: assets
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+electronVersion: 31.7.7

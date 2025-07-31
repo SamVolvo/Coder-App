@@ -1,86 +1,70 @@
-# Coder App - Your AI-Powered Coding Assistant
+# Live Code Editor with Syntax Highlighting
 
-Coder App is a powerful and intuitive desktop application that acts as your personal AI coding assistant. It leverages Google's Gemini AI to generate complete, multi-file code projects in various programming languages based on simple, natural language prompts. Whether you're prototyping a new idea, learning a new technology, or just looking to accelerate your workflow, Coder App helps you go from idea to code faster than ever before.
+This project demonstrates a simple web-based code editor with live syntax highlighting for JavaScript, built using React. It leverages `react-simple-code-editor` for the editor functionality and `prismjs` for the syntax highlighting.
 
-![Coder App Screenshot](https://github.com/SamVolvo/Coder-App/blob/master/assets/screenshot.png?raw=true)
+## Features
 
-## Key Features
+*   **Live Syntax Highlighting**: As you type, your JavaScript code is highlighted.
+*   **Simple Interface**: A clean and straightforward code editing experience.
+*   **Dark Theme**: Uses a dark theme for better readability in low-light environments.
 
-- **AI-Powered Code Generation**: Describe what you want to build, and let the AI generate the entire project structure and code.
-- **Live File System Sync**: Works directly with folders on your computer. All changes—from the AI or you—are saved instantly to your local files.
-- **Two-Way Syncing**: The app watches for external changes. Edit files in your favorite editor (like VS Code), and the app will update in real-time.
-- **Interactive File Explorer**: Full drag-and-drop support, multi-select, and a context menu for creating, renaming, and deleting files and folders.
-- **Live Code Previews**: Watch the AI write code character-by-character with a realistic typing animation and syntax highlighting.
-- **Change Highlighting**: Instantly see what the AI has changed with visual indicators for new and modified files and lines.
-- **AI Chat History**: Keep track of your entire conversation with the AI for each project.
-- **Secure & Private**: Your API key and projects are stored locally on your machine and are never shared.
+## Technologies Used
 
-## Installation
+*   **React**: A JavaScript library for building user interfaces.
+*   **`react-simple-code-editor`**: A lightweight, simple code editor component for React.
+*   **`prismjs`**: A lightweight, robust, and elegant syntax highlighter.
 
-Go to the [**Releases page**](https://github.com/SamVolvo/Coder-App/releases) on GitHub and download the appropriate installer for your operating system.
+## Setup and Installation
 
-### Windows
+Follow these steps to get the project up and running on your local machine.
 
-1.  Download the `.exe` installer (e.g., `coder-app-x.x.x.exe`).
-2.  Run the installer. You may see a Windows SmartScreen warning; click "More info" and then "Run anyway".
-3.  Follow the on-screen instructions to complete the installation.
+### Prerequisites
 
-### macOS
+Make sure you have Node.js and npm (or yarn) installed on your system.
 
-1.  Download the `.dmg` file.
-2.  Open the `.dmg` file.
-3.  Drag the `Coder App` icon into your `Applications` folder.
-4.  The first time you open the app, you may need to right-click the app icon and select "Open" due to Apple's security policies for apps from unidentified developers.
+*   **Node.js**: [Download & Install Node.js](https://nodejs.org/)
 
-### Linux
+### 1. Create a React App (if you haven't already)
 
-There are several options for Linux users.
+If you're starting from scratch, you can create a new React project using Create React App:
 
-#### AppImage (Recommended)
+```bash
+npx create-react-app my-code-editor
+cd my-code-editor
+```
 
-This should work on most modern Linux distributions.
-1.  Download the `.AppImage` file.
-2.  Make it executable: `chmod +x coder-app-*.AppImage`
-3.  Run it: `./coder-app-*.AppImage`
+### 2. Install Dependencies
 
-#### Debian/Ubuntu-based (`.deb`)
+Navigate into your project directory and install the necessary packages:
 
-1.  Download the `.deb` file.
-2.  Install it using your software center or via the terminal: `sudo dpkg -i coder-app-*.deb`
-3.  Launch the app from your applications menu.
+```bash
+npm install react-simple-code-editor prismjs
+# or
+yarn add react-simple-code-editor prismjs
+```
 
-#### Fedora/Red Hat-based (`.rpm`)
+### 3. Copy the Code
 
-1.  Download the `.rpm` file.
-2.  Install it using your software center or via the terminal: `sudo rpm -i coder-app-*.rpm`
-3.  Launch the app from your applications menu.
+Replace the contents of `src/App.js`, `src/App.css`, `src/index.js`, `src/index.css`, and `public/index.html` with the provided code.
 
-## Getting Started
+### 4. Run the Application
 
-1.  Launch Coder App after installing it.
-2.  The "Settings" window will appear automatically if no API key is set. You can also open it at any time by clicking the gear icon in the header.
-3.  Go to the [**Google AI Studio**](https://aistudio.google.com/app/apikey) to generate a free Gemini API key.
-4.  Copy the key, paste it into the "Gemini API Key" field in the app's settings, and click "Save Settings".
-5.  You're all set! Click "Open Project" in the header to select an empty or existing folder and start generating code.
+Start the development server:
 
-## For Developers (Running Locally)
+```bash
+npm start
+# or
+yarn start
+```
 
-**Prerequisites:** [Node.js](https://nodejs.org/) (which includes npm).
+This will open the application in your browser, usually at `http://localhost:3000`.
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/SamVolvo/Coder-App.git
-    ```
-2.  Navigate to the project directory:
-    ```bash
-    cd Coder-App
-    ```
-3.  Install dependencies:
-    ```bash
-    npm install
-    ```
-4.  Run the application in development mode:
-    ```bash
-    npm run dev
-    ```
-The application will launch with hot-reloading enabled. You will still need to set your Gemini API key via the in-app settings menu.
+## Usage
+
+Simply type or paste JavaScript code into the editor area. The syntax will be highlighted in real-time. You can modify the `code` state in `src/App.js` to change the initial content of the editor.
+
+## Customization
+
+*   **Language Highlighting**: To highlight a different language, you would need to import the corresponding `prismjs` component (e.g., `prismjs/components/prism-python`) and change `languages.javascript` to `languages.python` in the `highlight` prop of the `Editor` component in `src/App.js`.
+*   **Themes**: You can change the PrismJS theme by importing a different CSS file in `src/App.js` (e.g., `import 'prismjs/themes/prism.css';` for a light theme).
+*   **Editor Styles**: Modify `src/App.css` to adjust the editor's appearance, font, padding, etc.

@@ -57,6 +57,9 @@ const App: React.FC = () => {
   const [onAnimationComplete, setOnAnimationComplete] = useState<{ cb: (() => void) | null }>({ cb: null });
   
   const debounceWriteFileRef = useRef<number | null>(null);
+  const internalUpdateInProgress = useRef(false);
+  const internalUpdateTimeoutRef = useRef<number | null>(null);
+
 
   const refreshProject = useCallback(async (root: string) => {
     if (!window.electronAPI) return;
@@ -109,6 +112,11 @@ const App: React.FC = () => {
     if (!projectRoot || !window.electronAPI?.onProjectUpdate) return;
 
     const handleUpdate = async () => {
+        if (internalUpdateInProgress.current) {
+            console.log("Ignoring project update triggered by internal change.");
+            return;
+        }
+
         console.log("Project updated externally, refreshing...");
         await refreshProject(projectRoot);
 
@@ -120,12 +128,20 @@ const App: React.FC = () => {
                 console.error(`Failed to reload active file ${activeFile}:`, e);
                 // File might have been deleted, deselect it
                 setActiveFile(null);
+                setActiveFileContent('');
             }
         }
     };
 
     const removeListener = window.electronAPI.onProjectUpdate(handleUpdate);
-    return () => removeListener();
+    
+    // Cleanup timeout on component unmount
+    return () => {
+        removeListener();
+        if (internalUpdateTimeoutRef.current) {
+            clearTimeout(internalUpdateTimeoutRef.current);
+        }
+    };
   }, [projectRoot, refreshProject, activeFile]);
 
 
@@ -398,9 +414,23 @@ const App: React.FC = () => {
     if (debounceWriteFileRef.current) clearTimeout(debounceWriteFileRef.current);
     debounceWriteFileRef.current = window.setTimeout(async () => {
         try {
+            // Set a flag to ignore the file watcher event for this write
+            internalUpdateInProgress.current = true;
+            if (internalUpdateTimeoutRef.current) clearTimeout(internalUpdateTimeoutRef.current);
+            
             await window.electronAPI.writeFile(projectR, fileP, content);
+
+            // Reset the flag after a delay. This buffer allows the file watcher
+            // event to fire and be ignored before we start listening for external changes again.
+            internalUpdateTimeoutRef.current = window.setTimeout(() => {
+                internalUpdateInProgress.current = false;
+            }, 1000); 
+
         } catch (e) {
             setError(`Failed to save file: ${e instanceof Error ? e.message : String(e)}`);
+            // Ensure the flag is reset even if the write fails.
+            internalUpdateInProgress.current = false;
+            if (internalUpdateTimeoutRef.current) clearTimeout(internalUpdateTimeoutRef.current);
         }
     }, 300);
   }, []);
