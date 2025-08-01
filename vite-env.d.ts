@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 
 import { Content } from '@google/genai';
 import { TreeNode, SyntaxTheme } from './types';

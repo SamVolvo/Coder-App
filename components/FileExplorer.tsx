@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { FolderClosedIcon, FolderOpenIcon, FileCodeIcon, HtmlIcon, CssIcon, JsIcon, FilesIcon, FolderPlusIcon, PenLineIcon, TrashIcon, CopyDuplicateIcon, FilePlusIcon, DotIcon, UploadIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
@@ -238,7 +237,7 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
   };
 
   return (
-    <div className="bg-slate-800 rounded-lg shadow-lg h-80 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+    <div className="bg-slate-800 rounded-lg shadow-lg flex-1 min-h-0 flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
       <div className="flex items-center justify-between bg-slate-900 px-4 py-2 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center">
             <FilesIcon className="w-5 h-5 mr-3 text-indigo-400" />

@@ -2,7 +2,6 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, shell, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
-const fsSync = require('fs');
 const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
@@ -44,6 +43,7 @@ app.commandLine.appendSwitch('disable-features', 'Autofill');
 let tray = null;
 let mainWindow;
 let watcher = null;
+let isInternalChange = false;
 const windowIconPath = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
 function createWindow() {
@@ -90,6 +90,10 @@ function setupWatcher(projectRoot) {
 
   watcher
     .on('all', (event, path) => {
+      if (isInternalChange) {
+        log.info(`Watcher event ignored (internal change): ${event} on path: ${path}`);
+        return;
+      }
       log.info(`Watcher event: ${event} on path: ${path}`);
       if (mainWindow) {
         mainWindow.webContents.send('project-updated');
@@ -181,11 +185,23 @@ ipcMain.handle('read-project-tree', (event, projectRoot) => {
 
 ipcMain.handle('read-file', (event, projectRoot, relativePath) => fs.readFile(path.join(projectRoot, relativePath), 'utf-8'));
 
-ipcMain.handle('write-file', (event, projectRoot, relativePath, content) => {
-  const fullPath = path.join(projectRoot, relativePath);
-  const dir = path.dirname(fullPath);
-  fsSync.mkdirSync(dir, { recursive: true });
-  return fs.writeFile(fullPath, content, 'utf-8');
+ipcMain.handle('write-file', async (event, projectRoot, relativePath, content) => {
+  isInternalChange = true;
+  try {
+    const fullPath = path.join(projectRoot, relativePath);
+    const dir = path.dirname(fullPath);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(fullPath, content, 'utf-8');
+  } catch (err) {
+    log.error(`Error writing file ${relativePath}:`, err);
+    throw err;
+  } finally {
+    // This short delay prevents the watcher from firing on our own changes.
+    // It's a more robust way to handle the race condition than the previous timeout implementation.
+    setTimeout(() => {
+      isInternalChange = false;
+    }, 250);
+  }
 });
 
 ipcMain.handle('delete-node', (event, projectRoot, relativePath) => fs.rm(path.join(projectRoot, relativePath), { recursive: true, force: true }));

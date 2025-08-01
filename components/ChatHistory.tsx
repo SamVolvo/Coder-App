@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useEffect, useRef } from 'react';
 import { Content, Part } from '@google/genai';
 import { UserIcon, RobotIcon, SparklesIcon, ChevronUpIcon, ChevronDownIcon } from './icons';
@@ -54,7 +50,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ history, isCollapsed, onToggl
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center">
                 <UserIcon className="w-5 h-5 text-slate-300" />
             </div>
-            <div className="bg-slate-700 rounded-lg p-3 max-w-xs md:max-w-sm flex flex-col gap-2">
+            <div className="bg-slate-700 rounded-lg p-3 flex flex-col gap-2 break-words">
               {message.parts?.map(renderUserMessagePart)}
             </div>
           </div>
@@ -81,7 +77,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ history, isCollapsed, onToggl
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center">
                 <RobotIcon className="w-5 h-5 text-white" />
             </div>
-            <div className="bg-indigo-950/60 rounded-lg p-3 max-w-xs md:max-w-sm">
+            <div className="bg-indigo-950/60 rounded-lg p-3 break-words">
                 <p className="text-sm text-indigo-200 italic">{summary}</p>
             </div>
           </div>
@@ -92,7 +88,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({ history, isCollapsed, onToggl
   };
 
   return (
-    <div className={`bg-slate-800 rounded-lg shadow-lg flex flex-col overflow-hidden flex-shrink-0 transition-all duration-300 ease-in-out ${isCollapsed ? 'h-12' : 'h-64'}`}>
+    <div className={`bg-slate-800 rounded-lg shadow-lg flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'h-12 flex-shrink-0' : 'flex-1 min-h-0'}`}>
       <div className="flex items-center justify-between bg-slate-900 px-4 py-2 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center">
             <SparklesIcon className="w-5 h-5 mr-3 text-indigo-400" />

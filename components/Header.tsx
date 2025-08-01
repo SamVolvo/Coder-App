@@ -10,12 +10,17 @@ interface HeaderProps {
 }
 
 const Header: React.FC<HeaderProps> = ({ onNewProject, onOpenProject, onOpenSettings, isProjectOpen }) => {
+  // In development, Vite serves from the root, so `/assets/icon.png` works.
+  // In production, the file is loaded from `dist/index.html`, and assets are in a sibling folder, so `../assets/icon.png` is needed.
+  // Vite's `import.meta.env.PROD` boolean helps us differentiate.
+  const logoSrc = import.meta.env.PROD ? '../assets/icon.png' : '/assets/icon.png';
+
   return (
     <header className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-700">
       <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
             <div className="flex items-center">
-                <img src="./assets/icon.png" alt="Coder App Logo" className="w-10 h-10 mr-3" />
+                <img src={logoSrc} alt="Coder App Logo" className="w-10 h-10 mr-3" />
                 <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
                     Coder App
                 </h1>

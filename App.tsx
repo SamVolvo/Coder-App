@@ -3,13 +3,12 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import PromptForm from './components/PromptForm';
 import CodeDisplay from './components/CodeDisplay';
-import InstructionsDisplay from './components/InstructionsDisplay';
 import FileExplorer from './components/FileExplorer';
 import Notification from './components/Notification';
 import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import SettingsModal from './components/SettingsModal';
-import ChatHistory from './components/ChatHistory';
+import InfoPanel from './components/InfoPanel';
 import { initializeChat, sendMessage, getChatHistory, endChatSession } from './services/geminiService';
 import { ModalType, ModalContext, TreeNode, SyntaxTheme, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext } from './types';
 import { Content, Part } from '@google/genai';
@@ -48,7 +47,6 @@ const App: React.FC = () => {
   const [recentlyUpdatedPaths, setRecentlyUpdatedPaths] = useState<Set<string>>(new Set());
   const [readmeContent, setReadmeContent] = useState<string>('');
   const [chatHistory, setChatHistory] = useState<Content[]>([]);
-  const [isChatHistoryCollapsed, setIsChatHistoryCollapsed] = useState(false);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,8 +55,6 @@ const App: React.FC = () => {
   const [onAnimationComplete, setOnAnimationComplete] = useState<{ cb: (() => void) | null }>({ cb: null });
   
   const debounceWriteFileRef = useRef<number | null>(null);
-  const internalUpdateInProgress = useRef(false);
-  const internalUpdateTimeoutRef = useRef<number | null>(null);
 
 
   const refreshProject = useCallback(async (root: string) => {
@@ -112,11 +108,6 @@ const App: React.FC = () => {
     if (!projectRoot || !window.electronAPI?.onProjectUpdate) return;
 
     const handleUpdate = async () => {
-        if (internalUpdateInProgress.current) {
-            console.log("Ignoring project update triggered by internal change.");
-            return;
-        }
-
         console.log("Project updated externally, refreshing...");
         await refreshProject(projectRoot);
 
@@ -135,12 +126,8 @@ const App: React.FC = () => {
 
     const removeListener = window.electronAPI.onProjectUpdate(handleUpdate);
     
-    // Cleanup timeout on component unmount
     return () => {
         removeListener();
-        if (internalUpdateTimeoutRef.current) {
-            clearTimeout(internalUpdateTimeoutRef.current);
-        }
     };
   }, [projectRoot, refreshProject, activeFile]);
 
@@ -414,23 +401,9 @@ const App: React.FC = () => {
     if (debounceWriteFileRef.current) clearTimeout(debounceWriteFileRef.current);
     debounceWriteFileRef.current = window.setTimeout(async () => {
         try {
-            // Set a flag to ignore the file watcher event for this write
-            internalUpdateInProgress.current = true;
-            if (internalUpdateTimeoutRef.current) clearTimeout(internalUpdateTimeoutRef.current);
-            
             await window.electronAPI.writeFile(projectR, fileP, content);
-
-            // Reset the flag after a delay. This buffer allows the file watcher
-            // event to fire and be ignored before we start listening for external changes again.
-            internalUpdateTimeoutRef.current = window.setTimeout(() => {
-                internalUpdateInProgress.current = false;
-            }, 1000); 
-
         } catch (e) {
             setError(`Failed to save file: ${e instanceof Error ? e.message : String(e)}`);
-            // Ensure the flag is reset even if the write fails.
-            internalUpdateInProgress.current = false;
-            if (internalUpdateTimeoutRef.current) clearTimeout(internalUpdateTimeoutRef.current);
         }
     }, 300);
   }, []);
@@ -475,7 +448,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans bg-gray-900" onClick={() => setSelectedNodes(new Set())}>
+    <div className="h-screen flex flex-col font-sans bg-gray-900 overflow-hidden" onClick={() => setSelectedNodes(new Set())}>
       <Header 
         onNewProject={handleNewProject} 
         onOpenProject={handleOpenProject} 
@@ -483,14 +456,9 @@ const App: React.FC = () => {
         isProjectOpen={isProjectOpen}
       />
       
-      <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto">
+      <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto min-h-0">
         <div className="w-full md:w-1/3 lg:w-1/4 flex flex-col gap-6" onClick={(e) => e.stopPropagation()}>
           <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isApiKeySet={isApiKeySet} />
-          <ChatHistory 
-            history={chatHistory} 
-            isCollapsed={isChatHistoryCollapsed}
-            onToggleCollapse={() => setIsChatHistoryCollapsed(v => !v)}
-          />
           <FileExplorer 
             fileTree={fileTree} 
             activeFile={activeFile} 
@@ -507,7 +475,11 @@ const App: React.FC = () => {
             onUploadFile={handleUploadFile}
             projectRoot={projectRoot}
           />
-          <InstructionsDisplay instructions={readmeContent} isLoading={isLoading && !readmeContent && isProjectOpen} />
+          <InfoPanel 
+            chatHistory={chatHistory}
+            instructions={readmeContent}
+            isInstructionsLoading={isLoading && !readmeContent && isProjectOpen}
+          />
         </div>
         <div className="w-full md:w-2/3 lg:w-3/4 flex flex-col flex-grow min-h-0" onClick={(e) => e.stopPropagation()}>
             <CodeDisplay
