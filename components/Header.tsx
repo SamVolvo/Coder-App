@@ -1,55 +1,65 @@
-
 import React from 'react';
-import { FolderOpenIcon, SettingsIcon, XIcon } from './icons';
+import { SettingsIcon, FolderPlusIcon, XIcon, TerminalIcon } from './icons';
 
 interface HeaderProps {
-    onNewProject: () => void;
     onOpenProject: () => void;
+    onCloseProject: () => void;
     onOpenSettings: () => void;
     isProjectOpen: boolean;
+    onOpenTerminal: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onNewProject, onOpenProject, onOpenSettings, isProjectOpen }) => {
-  // In development, Vite serves from the root, so `/assets/icon.png` works.
-  // In production, the file is loaded from `dist/index.html`, and assets are in a sibling folder, so `../assets/icon.png` is needed.
-  // Vite's `import.meta.env.PROD` boolean helps us differentiate.
+const Header: React.FC<HeaderProps> = ({ onOpenProject, onCloseProject, onOpenSettings, isProjectOpen, onOpenTerminal }) => {
   const logoSrc = import.meta.env.PROD ? '../assets/icon.png' : '/assets/icon.png';
 
   return (
-    <header className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-700">
-      <div className="max-w-screen-2xl mx-auto px-4 md:px-6 lg:px-8">
+    <header className="bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10 border-b border-slate-700 flex-shrink-0">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-            <div className="flex items-center">
-                <img src={logoSrc} alt="Coder App Logo" className="w-10 h-10 mr-3" />
-                <h1 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
+            <div className="flex items-center min-w-0">
+                <img src={logoSrc} alt="Coder App Logo" className="w-8 h-8 sm:w-10 sm:h-10 mr-2 sm:mr-3" />
+                <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-100 truncate">
                     Coder App
                 </h1>
             </div>
-            <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex items-center gap-2">
                 <button
                     onClick={onOpenSettings}
-                    className="inline-flex items-center justify-center p-2 rounded-md text-slate-400 hover:text-white hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-colors"
                     title="Settings"
+                    className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-full transition-colors flex-shrink-0"
                 >
                     <SettingsIcon className="w-5 h-5" />
                 </button>
-                <div className="w-px h-6 bg-slate-700"></div>
-                <button
-                    onClick={onOpenProject}
-                    className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-colors"
-                >
-                    <FolderOpenIcon className="w-5 h-5 mr-2 -ml-1" />
-                    Open Project
-                </button>
-                 <button
-                    onClick={onNewProject}
-                    title={isProjectOpen ? "Close current project" : "No project open"}
-                    disabled={!isProjectOpen}
-                    className="inline-flex items-center justify-center px-4 py-2 border border-slate-600 text-sm font-medium rounded-md shadow-sm text-slate-300 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    <XIcon className="w-5 h-5 mr-2 -ml-1" />
-                    Close Project
-                </button>
+                
+                {isProjectOpen ? (
+                    <>
+                        <button
+                            onClick={onOpenTerminal}
+                            title="Open in Terminal"
+                            className="flex items-center justify-center text-sm p-2 md:px-4 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors duration-200"
+                        >
+                            <TerminalIcon className="w-5 h-5 md:mr-2" />
+                            <span className="hidden md:inline">Terminal</span>
+                        </button>
+                        <button
+                            onClick={onCloseProject}
+                            title="Close Project"
+                            className="flex items-center justify-center text-sm p-2 md:px-4 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors duration-200"
+                        >
+                            <XIcon className="w-5 h-5 md:mr-2" />
+                            <span className="hidden md:inline">Close</span>
+                        </button>
+                    </>
+                ) : (
+                    <button
+                        onClick={onOpenProject}
+                        title="Open Project"
+                        className="flex items-center justify-center text-sm p-2 md:px-4 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition-colors duration-200"
+                    >
+                        <FolderPlusIcon className="w-5 h-5 md:mr-2" />
+                        <span className="hidden md:inline">Open Project</span>
+                    </button>
+                )}
             </div>
         </div>
       </div>

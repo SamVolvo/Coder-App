@@ -570,3 +570,37 @@ export const ChevronDownIcon: React.FC<IconProps> = (props) => (
     <polyline points="6 9 12 15 18 9"></polyline>
   </svg>
 );
+
+export const TerminalIcon: React.FC<IconProps> = (props) => (
+    <svg 
+        xmlns="http://www.w3.org/2000/svg" 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        {...props}
+    >
+        <polyline points="4 17 10 11 4 5"></polyline>
+        <line x1="12" y1="19" x2="20" y2="19"></line>
+    </svg>
+);
+
+export const SlidersHorizontalIcon: React.FC<IconProps> = (props) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <line x1="21" y1="10" x2="3" y2="10" />
+    <line x1="21" y1="6" x2="3" y2="6" />
+    <line x1="21" y1="14" x2="3" y2="14" />
+    <line x1="21" y1="18" x2="3" y2="18" />
+  </svg>
+);

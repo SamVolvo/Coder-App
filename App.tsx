@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import PromptForm from './components/PromptForm';
@@ -9,6 +10,7 @@ import ConfirmModal from './components/ConfirmModal';
 import InputModal from './components/InputModal';
 import SettingsModal from './components/SettingsModal';
 import InfoPanel from './components/InfoPanel';
+import MobileNav from './components/MobileNav';
 import { initializeChat, sendMessage, getChatHistory, endChatSession } from './services/geminiService';
 import { ModalType, ModalContext, TreeNode, SyntaxTheme, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext } from './types';
 import { Content, Part } from '@google/genai';
@@ -55,6 +57,7 @@ const App: React.FC = () => {
   const [onAnimationComplete, setOnAnimationComplete] = useState<{ cb: (() => void) | null }>({ cb: null });
   
   const debounceWriteFileRef = useRef<number | null>(null);
+  const [mobileView, setMobileView] = useState<'controls' | 'code'>('controls');
 
 
   const refreshProject = useCallback(async (root: string) => {
@@ -81,6 +84,60 @@ const App: React.FC = () => {
         setError(e instanceof Error ? `Failed to refresh project: ${e.message}` : 'Unknown error refreshing project.');
     }
   }, []);
+
+  const resetState = useCallback(() => {
+    endChatSession();
+    setProjectRoot(null);
+    setFileTree([]);
+    setActiveFile(null);
+    setSelectedNodes(new Set());
+    setRecentlyUpdatedPaths(new Set());
+    setReadmeContent('');
+    setChatHistory([]);
+    setError(null);
+    setIsLoading(false);
+    setNotification(null);
+  }, []);
+
+  const handleOpenProject = useCallback(async () => {
+    if (!window.electronAPI) return;
+    try {
+        const rootPath = await window.electronAPI.openProject();
+        if (rootPath) {
+            resetState();
+            setProjectRoot(rootPath);
+            await refreshProject(rootPath);
+            const history = await window.electronAPI.readChatHistory(rootPath);
+            setChatHistory(history);
+            await initializeChat(history);
+            setNotification("Project opened successfully.");
+        }
+    } catch(e) {
+        setError(e instanceof Error ? e.message : 'Failed to open project.');
+    }
+  }, [resetState, refreshProject]);
+
+  const handleCloseProject = useCallback(() => {
+    if (!projectRoot) return;
+    setModalState({
+        type: 'confirm',
+        context: {
+            title: 'Close Project',
+            message: 'Are you sure you want to close the current project? You can reopen it at any time.',
+            onConfirm: resetState,
+        }
+    });
+  }, [projectRoot, resetState]);
+
+  const handleOpenTerminal = useCallback(async () => {
+    if (projectRoot && window.electronAPI) {
+      try {
+        await window.electronAPI.openInTerminal(projectRoot);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to open terminal.');
+      }
+    }
+  }, [projectRoot]);
 
   // Effect to load initial settings
   useEffect(() => {
@@ -149,6 +206,7 @@ const App: React.FC = () => {
     };
     loadContent();
   }, [activeFile, projectRoot]);
+
 
   const handleSendMessage = useCallback(async (prompt: string, imageBase64: string | null) => {
     if (!projectRoot) {
@@ -229,50 +287,6 @@ const App: React.FC = () => {
       setOnAnimationComplete({ cb: null });
     }
   }, [projectRoot, refreshProject]);
-
-  const resetState = useCallback(() => {
-    endChatSession();
-    setProjectRoot(null);
-    setFileTree([]);
-    setActiveFile(null);
-    setSelectedNodes(new Set());
-    setRecentlyUpdatedPaths(new Set());
-    setReadmeContent('');
-    setChatHistory([]);
-    setError(null);
-    setIsLoading(false);
-    setNotification(null);
-  }, []);
-
-  const handleNewProject = useCallback(() => {
-    if (!projectRoot) return;
-    setModalState({
-        type: 'confirm',
-        context: {
-            title: 'Close Project',
-            message: 'Are you sure you want to close the current project? You can reopen it at any time.',
-            onConfirm: resetState,
-        }
-    });
-  }, [projectRoot, resetState]);
-  
-  const handleOpenProject = useCallback(async () => {
-    if (!window.electronAPI) return;
-    try {
-        const rootPath = await window.electronAPI.openProject();
-        if (rootPath) {
-            resetState();
-            setProjectRoot(rootPath);
-            await refreshProject(rootPath);
-            const history = await window.electronAPI.readChatHistory(rootPath);
-            setChatHistory(history);
-            await initializeChat(history);
-            setNotification("Project opened successfully.");
-        }
-    } catch(e) {
-        setError(e instanceof Error ? e.message : 'Failed to open project.');
-    }
-  }, [resetState, refreshProject]);
 
   const clearIndicators = () => setRecentlyUpdatedPaths(new Set());
 
@@ -366,7 +380,12 @@ const App: React.FC = () => {
       }
       return newSelection;
     });
-    if (!isFolder) setActiveFile(path);
+    if (!isFolder) {
+      setActiveFile(path);
+      if (window.innerWidth < 768) { // md breakpoint
+          setMobileView('code');
+      }
+    }
   };
 
   const handleCopyPath = (nodePath: string) => {
@@ -450,14 +469,18 @@ const App: React.FC = () => {
   return (
     <div className="h-screen flex flex-col font-sans bg-gray-900 overflow-hidden" onClick={() => setSelectedNodes(new Set())}>
       <Header 
-        onNewProject={handleNewProject} 
-        onOpenProject={handleOpenProject} 
-        onOpenSettings={() => setModalState({ type: 'settings', context: null})}
+        onOpenProject={handleOpenProject}
+        onCloseProject={handleCloseProject}
+        onOpenSettings={() => setModalState({ type: 'settings', context: null })}
         isProjectOpen={isProjectOpen}
+        onOpenTerminal={handleOpenTerminal}
       />
       
-      <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto min-h-0">
-        <div className="w-full md:w-1/3 lg:w-1/4 flex flex-col gap-6" onClick={(e) => e.stopPropagation()}>
+      <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto min-h-0 md:pb-6 pb-20">
+        <div 
+            className={`flex-col gap-6 w-full md:flex-shrink-0 md:w-96 lg:w-[420px] ${mobileView === 'controls' ? 'flex' : 'hidden'} md:flex`}
+            onClick={(e) => e.stopPropagation()}
+        >
           <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isApiKeySet={isApiKeySet} />
           <FileExplorer 
             fileTree={fileTree} 
@@ -481,7 +504,10 @@ const App: React.FC = () => {
             isInstructionsLoading={isLoading && !readmeContent && isProjectOpen}
           />
         </div>
-        <div className="w-full md:w-2/3 lg:w-3/4 flex flex-col flex-grow min-h-0" onClick={(e) => e.stopPropagation()}>
+        <div 
+            className={`w-full flex-col flex-grow min-h-0 ${mobileView === 'code' ? 'flex' : 'hidden'} md:flex`}
+            onClick={(e) => e.stopPropagation()}
+        >
             <CodeDisplay
                 code={activeFileContent}
                 isLoading={isLoading}
@@ -500,6 +526,8 @@ const App: React.FC = () => {
       {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
       
       {renderModals()}
+
+      <MobileNav activeView={mobileView} onNavigate={setMobileView} />
     </div>
   );
 };

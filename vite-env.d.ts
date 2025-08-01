@@ -29,6 +29,7 @@ declare global {
       createFolder: (projectRoot: string, relativePath: string) => Promise<void>;
       uploadFile: (projectRoot: string) => Promise<string | null>;
       onProjectUpdate: (callback: () => void) => () => void; // Listener for external changes
+      openInTerminal: (projectRoot: string) => Promise<void>;
 
       // Chat History
       readChatHistory: (projectRoot: string) => Promise<Content[]>;

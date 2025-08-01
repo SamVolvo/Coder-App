@@ -1,4 +1,5 @@
 
+
 const { app, BrowserWindow, ipcMain, Tray, Menu, shell, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
@@ -6,6 +7,7 @@ const Store = require('electron-store');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const chokidar = require('chokidar');
+const { exec } = require('child_process');
 
 // --- Log Configuration ---
 log.transports.file.level = 'info';
@@ -25,9 +27,6 @@ const store = new Store();
 const allowPrerelease = store.get('allowPrerelease', false);
 autoUpdater.allowPrerelease = allowPrerelease;
 
-// This is a key fix for macOS. By disabling auto-download, we can control the flow
-// and prevent the OS from getting confused about replacing the running app bundle.
-// For Windows and Linux, auto-download is generally safe and provides a smoother experience.
 if (process.platform === 'darwin') {
   autoUpdater.autoDownload = false;
   log.info('macOS detected, setting autoDownload to false.');
@@ -46,6 +45,7 @@ let watcher = null;
 let isInternalChange = false;
 const windowIconPath = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 
+
 function createWindow() {
   log.info('Creating main window...');
   mainWindow = new BrowserWindow({
@@ -58,8 +58,8 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
+  
   mainWindow.setMenu(null);
-  log.info('Default menu bar removed.');
 
   if (!app.isPackaged) {
     log.info('Development mode detected. Loading from Vite server.');
@@ -116,6 +116,36 @@ ipcMain.handle('set-allow-prerelease', (event, value) => {
   store.set('allowPrerelease', value);
   autoUpdater.allowPrerelease = value;
 });
+
+ipcMain.handle('open-in-terminal', (event, projectRoot) => {
+  if (!projectRoot) return;
+
+  const command = {
+    win32: 'start cmd',
+    darwin: `open -a Terminal "${projectRoot}"`,
+    linux: `gnome-terminal --working-directory="${projectRoot}" || x-terminal-emulator --working-directory="${projectRoot}"`
+  }[process.platform];
+
+  if (command) {
+    exec(command, { cwd: projectRoot }, (error, stdout, stderr) => {
+      if (error) {
+        log.error(`Failed to open terminal: ${error.message}`);
+        // Fallback for Linux if gnome-terminal and x-terminal-emulator fail
+        if (process.platform === 'linux') {
+            exec(`xdg-open "${projectRoot}"`, (fallbackError) => {
+                if(fallbackError) log.error(`Fallback terminal command failed: ${fallbackError.message}`);
+            });
+        }
+      }
+      if (stderr) {
+        log.warn(`Terminal command stderr: ${stderr}`);
+      }
+    });
+  } else {
+    log.error(`Unsupported platform for opening terminal: ${process.platform}`);
+  }
+});
+
 
 // --- New Disk-Based Project Handlers ---
 

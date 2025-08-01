@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { FolderClosedIcon, FolderOpenIcon, FileCodeIcon, HtmlIcon, CssIcon, JsIcon, FilesIcon, FolderPlusIcon, PenLineIcon, TrashIcon, CopyDuplicateIcon, FilePlusIcon, DotIcon, UploadIcon } from './icons';
+import { FolderClosedIcon, FolderOpenIcon, FileCodeIcon, HtmlIcon, CssIcon, JsIcon, FilesIcon, FolderPlusIcon, PenLineIcon, TrashIcon, CopyDuplicateIcon, FilePlusIcon, DotIcon, UploadIcon, TerminalIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import { TreeNode } from '../types';
@@ -204,10 +204,10 @@ const FileExplorer: React.FC<FileExplorerProps> = (props) => {
       return isFolder ? [...folderActions, ...commonActions] : commonActions;
     } else {
       return [
-        { type: 'action', label: 'Upload File', icon: UploadIcon, action: onUploadFile },
+        { type: 'action', label: 'Upload File', icon: UploadIcon, action: onUploadFile, disabled: !projectRoot },
         { type: 'separator' },
-        { type: 'action', label: 'New File', icon: FilePlusIcon, action: () => onAddFile({}) },
-        { type: 'action', label: 'New Folder', icon: FolderPlusIcon, action: () => onAddFolder({}) },
+        { type: 'action', label: 'New File', icon: FilePlusIcon, action: () => onAddFile({}), disabled: !projectRoot },
+        { type: 'action', label: 'New Folder', icon: FolderPlusIcon, action: () => onAddFolder({}), disabled: !projectRoot },
       ];
     }
   };

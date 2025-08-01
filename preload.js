@@ -1,4 +1,5 @@
 
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -26,6 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('project-updated', listener);
     return () => ipcRenderer.removeListener('project-updated', listener);
   },
+  openInTerminal: (projectRoot) => ipcRenderer.invoke('open-in-terminal', projectRoot),
 
   // Chat History Management
   readChatHistory: (projectRoot) => ipcRenderer.invoke('read-chat-history', projectRoot),
