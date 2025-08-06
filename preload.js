@@ -1,22 +1,21 @@
-
-
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Settings & App Info
   getApiKey: () => ipcRenderer.invoke('get-api-key'),
   setApiKey: (key) => ipcRenderer.invoke('set-api-key', key),
-  getTypingEffect: () => ipcRenderer.invoke('get-typing-effect'),
-  setTypingEffect: (value) => ipcRenderer.invoke('set-typing-effect', value),
-  getSyntaxTheme: () => ipcRenderer.invoke('get-syntax-theme'),
-  setSyntaxTheme: (theme) => ipcRenderer.invoke('set-syntax-theme', theme),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getAiProvider: () => ipcRenderer.invoke('get-ai-provider'),
+  setAiProvider: (provider) => ipcRenderer.invoke('set-ai-provider', provider),
+  getOllamaConfig: () => ipcRenderer.invoke('get-ollama-config'),
+  setOllamaConfig: (config) => ipcRenderer.invoke('set-ollama-config', config),
+  getOllamaModels: (url) => ipcRenderer.invoke('get-ollama-models', url),
   
   // New Project/File System API
   openProject: () => ipcRenderer.invoke('open-project'),
   readProjectTree: (projectRoot) => ipcRenderer.invoke('read-project-tree', projectRoot),
   readFile: (projectRoot, relativePath) => ipcRenderer.invoke('read-file', projectRoot, relativePath),
-  writeFile: (projectRoot, relativePath, content) => ipcRenderer.invoke('write-file', projectRoot, relativePath, content),
+  writeFile: (payload) => ipcRenderer.invoke('write-file', payload),
   deleteNode: (projectRoot, relativePath) => ipcRenderer.invoke('delete-node', projectRoot, relativePath),
   renameNode: (projectRoot, oldRelativePath, newRelativePath) => ipcRenderer.invoke('rename-node', projectRoot, oldRelativePath, newRelativePath),
   createFile: (projectRoot, relativePath) => ipcRenderer.invoke('create-file', projectRoot, relativePath),
@@ -33,6 +32,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readChatHistory: (projectRoot) => ipcRenderer.invoke('read-chat-history', projectRoot),
   writeChatHistory: (projectRoot, history) => ipcRenderer.invoke('write-chat-history', projectRoot, history),
 
+  // AI Service Invocation
+  invokeOllama: (payload) => ipcRenderer.invoke('invoke-ollama', payload),
+
   // Updater APIs
   getAllowPrerelease: () => ipcRenderer.invoke('get-allow-prerelease'),
   setAllowPrerelease: (value) => ipcRenderer.invoke('set-allow-prerelease', value),
@@ -45,4 +47,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('update-status', listener);
   },
   openLogFile: () => ipcRenderer.send('open-log-file'),
+
+  // Feedback API
+  sendFeedback: (payload) => ipcRenderer.invoke('send-feedback', payload),
 });

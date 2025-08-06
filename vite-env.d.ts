@@ -1,19 +1,33 @@
-/// <reference types="vite/client" />
 
 import { Content } from '@google/genai';
-import { TreeNode, SyntaxTheme } from './types';
+import { AiProvider, OllamaConfig, TreeNode } from './types';
 
 // --- Main API Definition ---
 declare global {
+  // Manually define Vite's import.meta.env to fix type errors when `vite/client` isn't found.
+  interface ImportMetaEnv {
+    [key: string]: any;
+    BASE_URL: string;
+    MODE: string;
+    DEV: boolean;
+    PROD: boolean;
+    SSR: boolean;
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv;
+  }
+
   interface Window {
     electronAPI: {
       // Settings
       getApiKey: () => Promise<string | undefined>;
       setApiKey: (key: string) => Promise<void>;
-      getTypingEffect: () => Promise<boolean>;
-      setTypingEffect: (value: boolean) => Promise<void>;
-      getSyntaxTheme: () => Promise<SyntaxTheme>;
-      setSyntaxTheme: (theme: SyntaxTheme) => Promise<void>;
+      getAiProvider: () => Promise<AiProvider>;
+      setAiProvider: (provider: AiProvider) => Promise<void>;
+      getOllamaConfig: () => Promise<OllamaConfig | undefined>;
+      setOllamaConfig: (config: OllamaConfig) => Promise<void>;
+      getOllamaModels: (url: string) => Promise<string[]>;
       
       // App Info
       getAppVersion: () => Promise<string>;
@@ -22,7 +36,7 @@ declare global {
       openProject: () => Promise<string | null>; // Returns project root path
       readProjectTree: (projectRoot: string) => Promise<TreeNode[] | null>;
       readFile: (projectRoot: string, relativePath: string) => Promise<string>;
-      writeFile: (projectRoot: string, relativePath: string, content: string) => Promise<void>;
+      writeFile: (payload: { projectRoot: string, relativePath: string, content: string }) => Promise<void>;
       deleteNode: (projectRoot: string, relativePath: string) => Promise<void>;
       renameNode: (projectRoot: string, oldRelativePath: string, newRelativePath: string) => Promise<void>;
       createFile: (projectRoot: string, relativePath: string) => Promise<void>;
@@ -35,6 +49,9 @@ declare global {
       readChatHistory: (projectRoot: string) => Promise<Content[]>;
       writeChatHistory: (projectRoot: string, history: Content[]) => Promise<void>;
       
+      // AI Services
+      invokeOllama: (payload: { config: OllamaConfig, messages: any[] }) => Promise<string>;
+
       // Updater
       getAllowPrerelease: () => Promise<boolean>;
       setAllowPrerelease: (value: boolean) => Promise<void>;
@@ -48,6 +65,9 @@ declare global {
         progress?: { percent: number };
       }) => void) => () => void;
       openLogFile: () => void;
+
+      // Feedback
+      sendFeedback: (payload: { type: 'bug' | 'idea', message: string, version: string }) => Promise<{ success: boolean; message: string; }>;
     };
   }
 }

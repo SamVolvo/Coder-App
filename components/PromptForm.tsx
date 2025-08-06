@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { SparklesIcon, PaperclipIcon, XIcon } from './icons';
 
@@ -9,10 +5,10 @@ interface PromptFormProps {
   onSendMessage: (prompt: string, imageBase64: string | null) => void;
   isLoading: boolean;
   isSessionActive: boolean;
-  isApiKeySet: boolean;
+  isProviderConfigured: boolean;
 }
 
-const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSessionActive, isApiKeySet }) => {
+const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSessionActive, isProviderConfigured }) => {
   const [prompt, setPrompt] = useState<string>('');
   const [image, setImage] = useState<{ file: File, preview: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,16 +59,16 @@ const PromptForm: React.FC<PromptFormProps> = ({ onSendMessage, isLoading, isSes
   const placeholder = isSessionActive ? "e.g., add error handling for the network request" : "e.g., a simple todo list app with HTML, CSS, and JS";
   const buttonText = isSessionActive ? "Send Update" : "Generate Project";
 
-  const isFormDisabled = isLoading || !isApiKeySet;
+  const isFormDisabled = isLoading || !isProviderConfigured;
 
   return (
     <div className="bg-slate-800 rounded-lg shadow-lg p-6 flex flex-col relative">
-      {!isApiKeySet && (
+      {!isProviderConfigured && (
         <div 
           className="absolute inset-0 bg-slate-800/80 backdrop-blur-sm z-10 flex items-center justify-center p-4 text-center rounded-lg"
-          title="Please set your API key in the settings menu."
+          title="Please configure your AI provider in the settings menu."
         >
-          <p className="text-slate-400">API Key required. Please configure it in the Settings.</p>
+          <p className="text-slate-400">AI Provider not configured. Please check your Settings.</p>
         </div>
       )}
       <form onSubmit={handleSubmit} className="flex flex-col">
