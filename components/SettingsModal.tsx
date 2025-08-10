@@ -234,8 +234,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
 
                 {provider === 'ollama' && (
                     <div>
-                         <p className="text-slate-300 mb-2 text-sm">
+                        <p className="text-slate-300 mb-2 text-sm">
                           Configure your local or remote Ollama server. Models will be fetched automatically.
+                        </p>
+                        <p className="text-xs text-slate-400 mb-3">
+                          Recommended model: <code>qwen2.5-coder</code> (supports coding, images, and file inputs)
                         </p>
                         <div className="grid grid-cols-1 gap-4">
                              <div>
