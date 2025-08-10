@@ -58,7 +58,11 @@ export const sendMessage = async (
         throw new Error("Electron API is not available.");
     }
 
+
+    const apiKey = await window.electronAPI.getChatgptApiKey();
+
     const apiKey = await window.electronAPI.getApiKey();
+
     if (!apiKey) {
         throw new Error("API key is not set. Please add it in Settings.");
     }

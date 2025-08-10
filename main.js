@@ -102,8 +102,10 @@ function setupWatcher(projectRoot) {
 
 
 // --- IPC Handlers ---
-ipcMain.handle('get-api-key', () => store.get('apiKey'));
-ipcMain.handle('set-api-key', (event, key) => store.set('apiKey', key));
+ipcMain.handle('get-gemini-api-key', () => store.get('geminiApiKey'));
+ipcMain.handle('set-gemini-api-key', (event, key) => store.set('geminiApiKey', key));
+ipcMain.handle('get-chatgpt-api-key', () => store.get('chatgptApiKey'));
+ipcMain.handle('set-chatgpt-api-key', (event, key) => store.set('chatgptApiKey', key));
 ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('get-allow-prerelease', () => store.get('allowPrerelease', false));
 ipcMain.handle('set-allow-prerelease', (event, value) => {

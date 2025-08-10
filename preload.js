@@ -2,8 +2,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Settings & App Info
-  getApiKey: () => ipcRenderer.invoke('get-api-key'),
-  setApiKey: (key) => ipcRenderer.invoke('set-api-key', key),
+  getGeminiApiKey: () => ipcRenderer.invoke('get-gemini-api-key'),
+  setGeminiApiKey: (key) => ipcRenderer.invoke('set-gemini-api-key', key),
+  getChatgptApiKey: () => ipcRenderer.invoke('get-chatgpt-api-key'),
+  setChatgptApiKey: (key) => ipcRenderer.invoke('set-chatgpt-api-key', key),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getAiProvider: () => ipcRenderer.invoke('get-ai-provider'),
   setAiProvider: (provider) => ipcRenderer.invoke('set-ai-provider', provider),

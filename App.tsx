@@ -92,7 +92,8 @@ const thinkingMessages = [
 ];
 
 const App: React.FC = () => {
-  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
+  const [geminiApiKey, setGeminiApiKey] = useState<string | undefined>(undefined);
+  const [chatgptApiKey, setChatgptApiKey] = useState<string | undefined>(undefined);
   const [aiProvider, setAiProvider] = useState<AiProvider>('gemini');
   const [ollamaConfig, setOllamaConfig] = useState<OllamaConfig | undefined>();
 
@@ -224,15 +225,20 @@ const App: React.FC = () => {
   const fetchSettings = useCallback(async () => {
       if (!window.electronAPI) return;
       try {
-        const [storedKey, provider, ollamaConf] = await Promise.all([
-          window.electronAPI.getApiKey(),
+        const [storedGeminiKey, storedChatgptKey, provider, ollamaConf] = await Promise.all([
+          window.electronAPI.getGeminiApiKey(),
+          window.electronAPI.getChatgptApiKey(),
           window.electronAPI.getAiProvider(),
           window.electronAPI.getOllamaConfig()
         ]);
-        setApiKey(storedKey);
+        setGeminiApiKey(storedGeminiKey);
+        setChatgptApiKey(storedChatgptKey);
         setAiProvider(provider);
         setOllamaConfig(ollamaConf);
+
+        if ((provider === 'gemini' && !storedGeminiKey) || (provider === 'chatgpt' && !storedChatgptKey)) setModalState({ type: 'settings', context: null });
         if (!storedKey && (provider === 'gemini' || provider === 'chatgpt')) setModalState({ type: 'settings', context: null });
+
       } catch (e) {
         console.error("Failed to get settings:", e);
       }
@@ -501,14 +507,15 @@ const App: React.FC = () => {
       setNotification("Path copied to clipboard!");
   };
 
-  const handleSaveSettings = useCallback(async (settings: { apiKey?: string; aiProvider?: AiProvider; ollamaConfig?: OllamaConfig }) => {
+  const handleSaveSettings = useCallback(async (settings: { geminiApiKey?: string; chatgptApiKey?: string; aiProvider?: AiProvider; ollamaConfig?: OllamaConfig }) => {
     if (!window.electronAPI) return;
     try {
       const newProvider = settings.aiProvider;
       const oldProvider = aiProvider;
 
       // Save all settings to persistent storage first
-      if (settings.apiKey !== undefined) await window.electronAPI.setApiKey(settings.apiKey);
+      if (settings.geminiApiKey !== undefined) await window.electronAPI.setGeminiApiKey(settings.geminiApiKey);
+      if (settings.chatgptApiKey !== undefined) await window.electronAPI.setChatgptApiKey(settings.chatgptApiKey);
       if (newProvider) await window.electronAPI.setAiProvider(newProvider);
       if (settings.ollamaConfig !== undefined) await window.electronAPI.setOllamaConfig(settings.ollamaConfig);
       
@@ -579,7 +586,12 @@ const App: React.FC = () => {
   const closeModal = () => setModalState({ type: 'none', context: null });
   
   const isProviderConfigured =
+
+    (aiProvider === 'gemini' && !!geminiApiKey) ||
+    (aiProvider === 'chatgpt' && !!chatgptApiKey) ||
+
     ((aiProvider === 'gemini' || aiProvider === 'chatgpt') && !!apiKey) ||
+
     (aiProvider === 'ollama' && !!ollamaConfig?.url && !!ollamaConfig?.model);
   const isProjectOpen = !!projectRoot;
   
@@ -604,7 +616,7 @@ const App: React.FC = () => {
         return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={() => handleDeleteNodes(context.paths)} title={`Delete ${context.paths.size} item(s)?`} message={`Are you sure? This action cannot be undone.`}/>;
       }
       case 'settings': {
-        return <SettingsModal isOpen={true} onClose={closeModal} onSave={handleSaveSettings} currentApiKey={apiKey} currentAiProvider={aiProvider} currentOllamaConfig={ollamaConfig} />;
+        return <SettingsModal isOpen={true} onClose={closeModal} onSave={handleSaveSettings} currentGeminiApiKey={geminiApiKey} currentChatgptApiKey={chatgptApiKey} currentAiProvider={aiProvider} currentOllamaConfig={ollamaConfig} />;
       }
       default:
         return null;

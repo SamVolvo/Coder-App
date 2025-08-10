@@ -21,8 +21,10 @@ declare global {
   interface Window {
     electronAPI: {
       // Settings
-      getApiKey: () => Promise<string | undefined>;
-      setApiKey: (key: string) => Promise<void>;
+      getGeminiApiKey: () => Promise<string | undefined>;
+      setGeminiApiKey: (key: string) => Promise<void>;
+      getChatgptApiKey: () => Promise<string | undefined>;
+      setChatgptApiKey: (key: string) => Promise<void>;
       getAiProvider: () => Promise<AiProvider>;
       setAiProvider: (provider: AiProvider) => Promise<void>;
       getOllamaConfig: () => Promise<OllamaConfig | undefined>;
