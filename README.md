@@ -8,6 +8,12 @@ This project demonstrates a simple web-based code editor with live syntax highli
 *   **Simple Interface**: A clean and straightforward code editing experience.
 *   **Dark Theme**: Uses a dark theme for better readability in low-light environments.
 
+## Recommended AI Models
+
+The settings modal now highlights suggested AI models for advanced assistance.
+- Use `gemini-2.5-flash` for a model that can generate code, analyze images, and work with files you provide.
+- For local inference with Ollama, try `qwen2.5-coder`, which supports coding, image understanding, and file inputs.
+
 ## Technologies Used
 
 *   **React**: A JavaScript library for building user interfaces.
