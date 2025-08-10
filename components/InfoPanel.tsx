@@ -1,25 +1,28 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Content, Part } from '@google/genai';
-import { UserIcon, RobotIcon, SparklesIcon, WrenchIcon } from './icons';
+import { UserIcon, RobotIcon, SparklesIcon, WrenchIcon, TrashIcon } from './icons';
 import LoadingSpinner from './LoadingSpinner';
 
 interface InfoPanelProps {
   chatHistory: Content[];
   instructions: string;
   isInstructionsLoading: boolean;
+  onClearChat: () => void;
+  projectIsOpen: boolean;
 }
 
 type ActiveTab = 'chat' | 'instructions';
 
-const InfoPanel: React.FC<InfoPanelProps> = ({ chatHistory, instructions, isInstructionsLoading }) => {
+const InfoPanel: React.FC<InfoPanelProps> = ({ chatHistory, instructions, isInstructionsLoading, onClearChat, projectIsOpen }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('chat');
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (activeTab === 'chat') {
-      endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
+    // if (activeTab === 'chat') {
+    //   endOfMessagesRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // }
   }, [chatHistory, activeTab]);
 
   const renderUserMessagePart = (part: Part, index: number) => {
@@ -152,6 +155,16 @@ const InfoPanel: React.FC<InfoPanelProps> = ({ chatHistory, instructions, isInst
           isActive={activeTab === 'instructions'}
           onClick={() => setActiveTab('instructions')}
         />
+        {activeTab === 'chat' && (
+            <button
+                onClick={onClearChat}
+                disabled={!projectIsOpen || chatHistory.length === 0}
+                className="ml-auto mr-2 p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Clear Chat History"
+            >
+                <TrashIcon className="w-4 h-4" />
+            </button>
+        )}
       </div>
       <div className="flex-grow overflow-auto">
         {activeTab === 'chat' && renderChatContent()}

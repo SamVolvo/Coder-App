@@ -8,6 +8,12 @@ This project demonstrates a simple web-based code editor with live syntax highli
 *   **Simple Interface**: A clean and straightforward code editing experience.
 *   **Dark Theme**: Uses a dark theme for better readability in low-light environments.
 
+## Recommended AI Model
+
+The settings modal now highlights a suggested AI model for advanced assistance.
+Use `gemini-2.5-flash` for a model that can generate code, analyze images, and
+work with files you provide.
+
 ## Technologies Used
 
 *   **React**: A JavaScript library for building user interfaces.

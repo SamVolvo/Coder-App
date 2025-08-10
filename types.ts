@@ -1,4 +1,3 @@
-import { Content } from '@google/genai';
 
 export interface CodeFile {
   fileName: string; // This will now be a relative path
@@ -20,8 +19,6 @@ export type ModalContext =
   | GenericConfirmModalContext
   | null; // for modals that don't need context
 
-export type SyntaxTheme = 'vsc-dark-plus' | 'one-dark' | 'vs' | 'material-light';
-
 // --- File System Types ---
 export interface FileNode {
   type: 'file';
@@ -37,3 +34,11 @@ export interface FolderNode {
 }
 
 export type TreeNode = FileNode | FolderNode;
+
+// --- AI Provider Types ---
+export type AiProvider = 'gemini' | 'ollama';
+
+export interface OllamaConfig {
+  url: string;
+  model: string;
+}

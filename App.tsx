@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import PromptForm from './components/PromptForm';
@@ -11,34 +9,82 @@ import InputModal from './components/InputModal';
 import SettingsModal from './components/SettingsModal';
 import InfoPanel from './components/InfoPanel';
 import MobileNav from './components/MobileNav';
-import { initializeChat, sendMessage, getChatHistory, endChatSession } from './services/geminiService';
-import { ModalType, ModalContext, TreeNode, SyntaxTheme, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext } from './types';
+import { initializeChat, sendMessage as sendMessageGemini, getChatHistory, endChatSession } from './services/geminiService';
+import { sendMessage as sendMessageOllama } from './services/ollamaService';
+import { ModalType, ModalContext, TreeNode, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext, AiProvider, OllamaConfig } from './types';
 import { Content, Part } from '@google/genai';
 
-const getLanguageFromFileName = (fileName: string | null): string => {
-    if (!fileName) return 'plaintext';
-    const extension = fileName.split('.').pop()?.toLowerCase();
-    switch (extension) {
-        case 'js': case 'jsx': return 'javascript';
-        case 'ts': case 'tsx': return 'typescript';
-        case 'py': return 'python';
-        case 'java': return 'java';
-        case 'cs': return 'csharp';
-        case 'go': return 'go';
-        case 'rs': return 'rust';
-        case 'html': return 'html';
-        case 'css': return 'css';
-        case 'sql': return 'sql';
-        case 'json': return 'json';
-        case 'md': return 'markdown';
-        default: return 'plaintext';
+const getProjectContextString = async (root: string, tree: TreeNode[], activeFile: string | null, activeFileContent: string): Promise<string> => {
+    const contextParts: string[] = [];
+
+    const processNode = async (node: TreeNode) => {
+        if (node.type === 'file') {
+            try {
+                const content = node.path === activeFile 
+                    ? activeFileContent 
+                    : await window.electronAPI.readFile(root, node.path);
+                
+                const lang = node.name.split('.').pop() || '';
+                contextParts.push(`File: \`${node.path}\`\n\`\`\`${lang}\n${content}\n\`\`\``);
+            } catch (e) {
+                console.error(`Could not read file for context: ${node.path}`, e);
+            }
+        } else if (node.children) {
+            await Promise.all(node.children.map(processNode));
+        }
+    };
+
+    await Promise.all(tree.map(processNode));
+
+    if (contextParts.length === 0) {
+        return "CONTEXT: This is a new project with no existing files.\n\n";
     }
+
+    return `CONTEXT: The current state of the project files is as follows:\n\n---\n` +
+           contextParts.join('\n\n---\n') +
+           `\n\n---\n\n`;
 };
+
+// Sorts folders before files, then alphabetically
+const sortTree = (a: TreeNode, b: TreeNode) => {
+  if (a.type === 'folder' && b.type === 'file') return -1;
+  if (a.type === 'file' && b.type === 'folder') return 1;
+  return a.name.localeCompare(b.name);
+};
+
+// Creates a context string with just the file tree and active file content for performance.
+const getFileTreeContextString = (tree: TreeNode[], activeFile: string | null, activeFileContent: string): string => {
+    const contextParts: string[] = ["Project file structure:"];
+    
+    const buildTreeString = (nodes: TreeNode[], prefix = '') => {
+        const sortedNodes = [...nodes].sort(sortTree);
+        sortedNodes.forEach((node, index) => {
+            const isLast = index === sortedNodes.length - 1;
+            const linePrefix = prefix + (isLast ? '└── ' : '├── ');
+            contextParts.push(`${linePrefix}${node.name}`);
+            if (node.type === 'folder' && node.children.length > 0) {
+                const childPrefix = prefix + (isLast ? '    ' : '│   ');
+                buildTreeString(node.children, childPrefix);
+            }
+        });
+    };
+    buildTreeString(tree);
+
+    if (activeFile && activeFileContent) {
+        const lang = activeFile.split('.').pop() || '';
+        contextParts.push(`\n\nContent of active file ('${activeFile}'):\n\`\`\`${lang}\n${activeFileContent}\n\`\`\``);
+    } else if (activeFile) {
+        contextParts.push(`\n\nNo content available for active file ('${activeFile}'). It might be empty.`);
+    }
+    
+    return `CONTEXT:\n` + contextParts.join('\n') + `\n\n`;
+};
+
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
-  const [useTypingEffect, setUseTypingEffect] = useState(true);
-  const [syntaxTheme, setSyntaxTheme] = useState<SyntaxTheme>('vsc-dark-plus');
+  const [aiProvider, setAiProvider] = useState<AiProvider>('gemini');
+  const [ollamaConfig, setOllamaConfig] = useState<OllamaConfig | undefined>();
 
   // --- New State Management for Disk-Based Projects ---
   const [projectRoot, setProjectRoot] = useState<string | null>(null);
@@ -54,7 +100,6 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [modalState, setModalState] = useState<{ type: ModalType; context: ModalContext }>({ type: 'none', context: null });
-  const [onAnimationComplete, setOnAnimationComplete] = useState<{ cb: (() => void) | null }>({ cb: null });
   
   const debounceWriteFileRef = useRef<number | null>(null);
   const [mobileView, setMobileView] = useState<'controls' | 'code'>('controls');
@@ -109,13 +154,15 @@ const App: React.FC = () => {
             await refreshProject(rootPath);
             const history = await window.electronAPI.readChatHistory(rootPath);
             setChatHistory(history);
-            await initializeChat(history);
+            if (aiProvider === 'gemini') {
+                await initializeChat(history);
+            }
             setNotification("Project opened successfully.");
         }
     } catch(e) {
         setError(e instanceof Error ? e.message : 'Failed to open project.');
     }
-  }, [resetState, refreshProject]);
+  }, [resetState, refreshProject, aiProvider]);
 
   const handleCloseProject = useCallback(() => {
     if (!projectRoot) return;
@@ -138,27 +185,28 @@ const App: React.FC = () => {
       }
     }
   }, [projectRoot]);
-
-  // Effect to load initial settings
-  useEffect(() => {
-    const checkInitialSettings = async () => {
+  
+  const fetchSettings = useCallback(async () => {
       if (!window.electronAPI) return;
       try {
-        const storedKey = await window.electronAPI.getApiKey();
+        const [storedKey, provider, ollamaConf] = await Promise.all([
+          window.electronAPI.getApiKey(),
+          window.electronAPI.getAiProvider(),
+          window.electronAPI.getOllamaConfig()
+        ]);
         setApiKey(storedKey);
-        if (!storedKey) setModalState({ type: 'settings', context: null });
-
-        const typingEffectEnabled = await window.electronAPI.getTypingEffect();
-        setUseTypingEffect(typingEffectEnabled);
-
-        const theme = await window.electronAPI.getSyntaxTheme();
-        setSyntaxTheme(theme);
+        setAiProvider(provider);
+        setOllamaConfig(ollamaConf);
+        if (!storedKey && provider === 'gemini') setModalState({ type: 'settings', context: null });
       } catch (e) {
         console.error("Failed to get settings:", e);
       }
-    };
-    checkInitialSettings();
   }, []);
+
+  // Effect to load initial settings
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   // Effect to watch for external file changes
   useEffect(() => {
@@ -218,44 +266,61 @@ const App: React.FC = () => {
     setRecentlyUpdatedPaths(new Set());
     
     try {
-      const history = await window.electronAPI.readChatHistory(projectRoot);
-      
       const userParts: Part[] = [{ text: prompt }];
       if (imageBase64) {
-          // Assuming PNG for simplicity, can be improved to detect MIME type
           userParts.push({ inlineData: { mimeType: 'image/png', data: imageBase64 } });
       }
       const userContent: Content = { role: 'user', parts: userParts };
-
-      setChatHistory(history.concat(userContent));
-      await initializeChat(history);
       
-      const response = await sendMessage(userContent);
+      // Optimistic UI update for user message
+      setChatHistory(prev => prev.concat(userContent));
+      const currentHistory = [...chatHistory];
+      
+      let response;
+      
+      if (aiProvider === 'ollama') {
+        if (!ollamaConfig?.url || !ollamaConfig?.model) throw new Error("Ollama is not configured.");
+        const projectContextForOllama = getFileTreeContextString(fileTree, activeFile, activeFileContent);
+        response = await sendMessageOllama(userContent, projectContextForOllama, currentHistory, ollamaConfig);
+      } else { // gemini
+        const projectContext = await getProjectContextString(projectRoot, fileTree, activeFile, activeFileContent);
+        const apiUserParts: Part[] = [{ text: `${projectContext}USER REQUEST: ${prompt}` }];
+        if (imageBase64) {
+            apiUserParts.push({ inlineData: { mimeType: 'image/png', data: imageBase64 } });
+        }
+        const apiUserContent: Content = { role: 'user', parts: apiUserParts };
+
+        const historyOnDisk = await window.electronAPI.readChatHistory(projectRoot);
+        await initializeChat(historyOnDisk);
+        response = await sendMessageGemini(apiUserContent);
+      }
       
       const updatedPaths = new Set<string>();
+      for (const file of response.files) {
+        await window.electronAPI.writeFile({ projectRoot, relativePath: file.fileName, content: file.code });
+        updatedPaths.add(file.fileName);
+      }
 
-      const animateFileByFile = async () => {
-        for (const file of response.files) {
-          await window.electronAPI.writeFile(projectRoot, file.fileName, file.code);
-          updatedPaths.add(file.fileName);
-          setActiveFile(file.fileName);
-          
-          await new Promise<void>(resolve => {
-            setOnAnimationComplete({ cb: resolve });
-          });
-        }
-      };
-
-      await animateFileByFile();
+      if (response.files.length > 0) {
+        setActiveFile(response.files[response.files.length - 1].fileName);
+      }
       
-      const newHistory = await getChatHistory();
-      if(newHistory) {
+      let newHistory: Content[];
+      if(aiProvider === 'gemini') {
+          newHistory = await getChatHistory() ?? [];
+      } else {
+          const modelResponsePart: Part = { text: JSON.stringify(response) };
+          const modelContent: Content = { role: 'model', parts: [modelResponsePart] };
+          newHistory = [...currentHistory, userContent, modelContent];
+      }
+
+      if(newHistory.length > 0) {
           setChatHistory(newHistory);
           await window.electronAPI.writeChatHistory(projectRoot, newHistory);
       }
 
       if (response.readmeContent) {
-          await window.electronAPI.writeFile(projectRoot, 'README.md', response.readmeContent);
+          await window.electronAPI.writeFile({ projectRoot, relativePath: 'README.md', content: response.readmeContent });
       }
       setReadmeContent(response.readmeContent || '');
       
@@ -284,9 +349,8 @@ const App: React.FC = () => {
       setChatHistory(prev => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
-      setOnAnimationComplete({ cb: null });
     }
-  }, [projectRoot, refreshProject]);
+  }, [projectRoot, refreshProject, fileTree, activeFile, activeFileContent, aiProvider, ollamaConfig, chatHistory]);
 
   const clearIndicators = () => setRecentlyUpdatedPaths(new Set());
 
@@ -393,34 +457,45 @@ const App: React.FC = () => {
       setNotification("Path copied to clipboard!");
   };
 
-  const handleSaveSettings = async (settings: { apiKey?: string; useTypingEffect?: boolean; syntaxTheme?: SyntaxTheme }) => {
-    clearIndicators();
+  const handleSaveSettings = useCallback(async (settings: { apiKey?: string; aiProvider?: AiProvider; ollamaConfig?: OllamaConfig }) => {
     if (!window.electronAPI) return;
     try {
-        if (settings.apiKey !== undefined) {
-            await window.electronAPI.setApiKey(settings.apiKey);
-            setApiKey(settings.apiKey);
+      const newProvider = settings.aiProvider;
+      const oldProvider = aiProvider;
+
+      // Save all settings to persistent storage first
+      if (settings.apiKey !== undefined) await window.electronAPI.setApiKey(settings.apiKey);
+      if (newProvider) await window.electronAPI.setAiProvider(newProvider);
+      if (settings.ollamaConfig !== undefined) await window.electronAPI.setOllamaConfig(settings.ollamaConfig);
+      
+      // Refetch settings to update the component's state from the source of truth
+      await fetchSettings();
+
+      // Handle provider state transition *after* settings have been saved and state updated
+      if (newProvider && newProvider !== oldProvider) {
+        if (oldProvider === 'gemini') {
+          endChatSession();
         }
-        if (settings.useTypingEffect !== undefined) {
-            await window.electronAPI.setTypingEffect(settings.useTypingEffect);
-            setUseTypingEffect(settings.useTypingEffect);
+        if (newProvider === 'gemini' && projectRoot) {
+          // If we switched TO Gemini and a project is currently open, initialize a chat session for it.
+          const historyOnDisk = await window.electronAPI.readChatHistory(projectRoot);
+          await initializeChat(historyOnDisk);
         }
-        if (settings.syntaxTheme !== undefined) {
-            await window.electronAPI.setSyntaxTheme(settings.syntaxTheme);
-            setSyntaxTheme(settings.syntaxTheme);
-        }
-        setError(null);
-        setNotification("Settings saved successfully!");
+      }
+
+      setError(null);
+      setNotification("Settings saved successfully!");
     } catch(e) {
-        setError(`Failed to save settings: ${e instanceof Error ? e.message : String(e)}`);
+      setError(`Failed to save settings: ${e instanceof Error ? e.message : String(e)}`);
     }
-  };
+  }, [aiProvider, projectRoot, fetchSettings]);
+
 
   const debouncedWriteFile = useCallback((projectR: string, fileP: string, content: string) => {
     if (debounceWriteFileRef.current) clearTimeout(debounceWriteFileRef.current);
     debounceWriteFileRef.current = window.setTimeout(async () => {
         try {
-            await window.electronAPI.writeFile(projectR, fileP, content);
+            await window.electronAPI.writeFile({ projectRoot: projectR, relativePath: fileP, content });
         } catch (e) {
             setError(`Failed to save file: ${e instanceof Error ? e.message : String(e)}`);
         }
@@ -434,8 +509,32 @@ const App: React.FC = () => {
     debouncedWriteFile(projectRoot, activeFile, newCode);
   };
   
+  const handleClearChatHistory = useCallback(() => {
+    if (!projectRoot) return;
+    setModalState({
+      type: 'confirm',
+      context: {
+        title: 'Clear Chat History',
+        message: 'Are you sure you want to permanently delete the chat history for this project?',
+        onConfirm: async () => {
+          try {
+            setChatHistory([]);
+            await window.electronAPI.writeChatHistory(projectRoot, []);
+            if (aiProvider === 'gemini') {
+                await initializeChat([]); // Re-initialize with empty history
+            }
+            setNotification("Chat history cleared.");
+          } catch (e) {
+            setError(e instanceof Error ? e.message : 'Failed to clear chat history.');
+          }
+        },
+      },
+    });
+  }, [projectRoot, aiProvider]);
+
   const closeModal = () => setModalState({ type: 'none', context: null });
-  const isApiKeySet = !!apiKey;
+  
+  const isProviderConfigured = (aiProvider === 'gemini' && !!apiKey) || (aiProvider === 'ollama' && !!ollamaConfig?.url && !!ollamaConfig?.model);
   const isProjectOpen = !!projectRoot;
   
   const renderModals = () => {
@@ -459,7 +558,7 @@ const App: React.FC = () => {
         return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={() => handleDeleteNodes(context.paths)} title={`Delete ${context.paths.size} item(s)?`} message={`Are you sure? This action cannot be undone.`}/>;
       }
       case 'settings': {
-        return <SettingsModal isOpen={true} onClose={closeModal} onSave={handleSaveSettings} currentApiKey={apiKey} currentUseTypingEffect={useTypingEffect} currentSyntaxTheme={syntaxTheme} />;
+        return <SettingsModal isOpen={true} onClose={closeModal} onSave={handleSaveSettings} currentApiKey={apiKey} currentAiProvider={aiProvider} currentOllamaConfig={ollamaConfig} />;
       }
       default:
         return null;
@@ -481,7 +580,7 @@ const App: React.FC = () => {
             className={`flex-col gap-6 w-full md:flex-shrink-0 md:w-96 lg:w-[420px] ${mobileView === 'controls' ? 'flex' : 'hidden'} md:flex`}
             onClick={(e) => e.stopPropagation()}
         >
-          <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isApiKeySet={isApiKeySet} />
+          <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isProviderConfigured={isProviderConfigured} />
           <FileExplorer 
             fileTree={fileTree} 
             activeFile={activeFile} 
@@ -502,6 +601,8 @@ const App: React.FC = () => {
             chatHistory={chatHistory}
             instructions={readmeContent}
             isInstructionsLoading={isLoading && !readmeContent && isProjectOpen}
+            onClearChat={handleClearChatHistory}
+            projectIsOpen={isProjectOpen}
           />
         </div>
         <div 
@@ -512,13 +613,9 @@ const App: React.FC = () => {
                 code={activeFileContent}
                 isLoading={isLoading}
                 error={error}
-                language={getLanguageFromFileName(activeFile)}
                 fileName={activeFile}
                 hasFiles={fileTree.length > 0}
                 onCodeChange={handleCodeChange}
-                useTypingEffect={useTypingEffect}
-                syntaxTheme={syntaxTheme}
-                onAnimationComplete={onAnimationComplete.cb}
             />
         </div>
       </main>

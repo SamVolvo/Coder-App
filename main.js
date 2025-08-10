@@ -1,6 +1,4 @@
-
-
-const { app, BrowserWindow, ipcMain, Tray, Menu, shell, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, shell, nativeImage, dialog, net } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const Store = require('electron-store');
@@ -106,16 +104,18 @@ function setupWatcher(projectRoot) {
 // --- IPC Handlers ---
 ipcMain.handle('get-api-key', () => store.get('apiKey'));
 ipcMain.handle('set-api-key', (event, key) => store.set('apiKey', key));
-ipcMain.handle('get-typing-effect', () => store.get('useTypingEffect', true));
-ipcMain.handle('set-typing-effect', (event, value) => store.set('useTypingEffect', value));
-ipcMain.handle('get-syntax-theme', () => store.get('syntaxTheme', 'vsc-dark-plus'));
-ipcMain.handle('set-syntax-theme', (event, theme) => store.set('syntaxTheme', theme));
 ipcMain.handle('get-app-version', () => app.getVersion());
 ipcMain.handle('get-allow-prerelease', () => store.get('allowPrerelease', false));
 ipcMain.handle('set-allow-prerelease', (event, value) => {
   store.set('allowPrerelease', value);
   autoUpdater.allowPrerelease = value;
 });
+
+// --- AI Provider Settings ---
+ipcMain.handle('get-ai-provider', () => store.get('aiProvider', 'gemini'));
+ipcMain.handle('set-ai-provider', (event, provider) => store.set('aiProvider', provider));
+ipcMain.handle('get-ollama-config', () => store.get('ollamaConfig', { url: 'http://localhost:11434', model: '' }));
+ipcMain.handle('set-ollama-config', (event, config) => store.set('ollamaConfig', config));
 
 ipcMain.handle('open-in-terminal', (event, projectRoot) => {
   if (!projectRoot) return;
@@ -215,7 +215,7 @@ ipcMain.handle('read-project-tree', (event, projectRoot) => {
 
 ipcMain.handle('read-file', (event, projectRoot, relativePath) => fs.readFile(path.join(projectRoot, relativePath), 'utf-8'));
 
-ipcMain.handle('write-file', async (event, projectRoot, relativePath, content) => {
+ipcMain.handle('write-file', async (event, { projectRoot, relativePath, content }) => {
   isInternalChange = true;
   try {
     const fullPath = path.join(projectRoot, relativePath);
@@ -262,13 +262,172 @@ ipcMain.handle('write-chat-history', async (event, projectRoot, history) => {
     }
 });
 
+// --- Ollama Handlers ---
+
+ipcMain.handle('get-ollama-models', (event, url) => {
+    return new Promise((resolve, reject) => {
+        try {
+            const requestUrl = new URL(url);
+            const hostname = requestUrl.hostname === 'localhost' ? '127.0.0.1' : requestUrl.hostname;
+            const options = {
+                method: 'GET',
+                protocol: requestUrl.protocol,
+                hostname: hostname,
+                port: requestUrl.port,
+                path: '/api/tags',
+            };
+            const request = net.request(options);
+            let responseBody = '';
+
+            request.on('response', (response) => {
+                if (response.statusCode !== 200) {
+                    return reject(new Error(`Server responded with status code ${response.statusCode}`));
+                }
+                response.on('data', (chunk) => {
+                    responseBody += chunk.toString();
+                });
+                response.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(responseBody);
+                        if (parsed.models && Array.isArray(parsed.models)) {
+                            resolve(parsed.models.map(m => m.name));
+                        } else {
+                            reject(new Error('Invalid response format from Ollama server.'));
+                        }
+                    } catch (e) {
+                        reject(new Error('Failed to parse response from Ollama server.'));
+                    }
+                });
+            });
+
+            request.on('error', (error) => {
+                log.error('Error fetching Ollama models:', error);
+                reject(new Error(`Could not connect to Ollama server at ${url}.`));
+            });
+            request.end();
+        } catch (e) {
+            log.error('Invalid Ollama URL provided for model fetching:', url, e);
+            reject(new Error(`The Ollama server URL "${url}" is not a valid URL.`));
+        }
+    });
+});
+
+ipcMain.handle('invoke-ollama', (event, { config, messages }) => {
+    return new Promise((resolve, reject) => {
+        const payload = JSON.stringify({
+            model: config.model,
+            messages,
+            stream: false,
+            format: 'json', // Enforce JSON output
+        });
+
+        try {
+            const requestUrl = new URL(config.url);
+            const hostname = requestUrl.hostname === 'localhost' ? '127.0.0.1' : requestUrl.hostname;
+            const options = {
+                method: 'POST',
+                protocol: requestUrl.protocol,
+                hostname: hostname,
+                port: requestUrl.port,
+                path: '/api/chat',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            };
+            
+            const request = net.request(options);
+            let responseBody = '';
+
+            request.on('response', (response) => {
+                if (response.statusCode < 200 || response.statusCode >= 300) {
+                    log.error(`Ollama request failed with status: ${response.statusCode}`);
+                    reject(new Error(`Ollama server responded with status code ${response.statusCode}`));
+                    return;
+                }
+                response.on('data', (chunk) => {
+                    responseBody += chunk.toString();
+                });
+                response.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(responseBody);
+                        if (parsed.error) {
+                            log.error('Ollama API error:', parsed.error);
+                            reject(new Error(parsed.error));
+                        } else {
+                            resolve(parsed.message.content);
+                        }
+                    } catch (e) {
+                        log.error('Failed to parse Ollama response:', e);
+                        reject(new Error('Failed to parse Ollama response.'));
+                    }
+                });
+            });
+
+            request.on('error', (error) => {
+                log.error('Error invoking Ollama:', error);
+                reject(new Error(`Could not connect to Ollama server at ${config.url}. Make sure it's running.`));
+            });
+
+            request.write(payload);
+            request.end();
+        } catch (e) {
+            log.error('Invalid Ollama URL provided:', config.url, e);
+            reject(new Error(`The Ollama server URL "${config.url}" is not a valid URL.`));
+        }
+    });
+});
+
+// --- Feedback Handler ---
+ipcMain.handle('send-feedback', (event, { type, message, version }) => {
+    return new Promise((resolve) => {
+        const DISCORD_WEBHOOK_URL = 'YOUR_DISCORD_WEBHOOK_URL_HERE';
+
+        if (DISCORD_WEBHOOK_URL.includes('YOUR_DISCORD_WEBHOOK_URL_HERE')) {
+            log.warn('Discord webhook URL is not configured.');
+            resolve({ success: true, message: 'Feedback submitted (developer mode).' });
+            return;
+        }
+
+        const embed = {
+            title: type === 'bug' ? '🐛 New Bug Report' : '💡 New Idea/Feedback',
+            description: message,
+            color: type === 'bug' ? 15158332 : 3447003, // red for bug, blue for idea
+            footer: { text: `Coder App v${version}` },
+            timestamp: new Date().toISOString(),
+        };
+        const payload = JSON.stringify({ embeds: [embed] });
+
+        const request = net.request({
+            method: 'POST',
+            url: DISCORD_WEBHOOK_URL,
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        request.on('response', (response) => {
+            if (response.statusCode >= 200 && response.statusCode < 300) {
+                resolve({ success: true, message: 'Feedback sent successfully!' });
+            } else {
+                log.error(`Discord webhook failed with status: ${response.statusCode}`);
+                resolve({ success: false, message: `Failed to send feedback (status: ${response.statusCode}).` });
+            }
+        });
+
+        request.on('error', (error) => {
+            log.error('Error sending feedback to Discord:', error);
+            resolve({ success: false, message: 'An error occurred while sending feedback.' });
+        });
+
+        request.write(payload);
+        request.end();
+    });
+});
+
+
 // --- Updater and Logging ---
 ipcMain.on('check-for-updates', () => {
   log.info("IPC: 'check-for-updates' received.");
   if (app.isPackaged) {
     autoUpdater.checkForUpdates().catch(err => {
-        // The UI will receive an 'error' status from the 'error' event listener,
-        // so we just need to log it here and prevent a crash.
         log.error('Error during manual update check:', err);
     });
   }
@@ -345,11 +504,7 @@ app.whenReady().then(() => {
     log.info('System tray created successfully.');
 
     if (app.isPackaged) {
-      // Check silently on startup, but don't download.
-      // The user can trigger download from the settings UI.
       autoUpdater.checkForUpdates().catch(err => {
-        // This is a silent check, so we'll just log the error.
-        // The user can manually check for updates later.
         log.error('Error during startup update check:', err);
       });
     }
