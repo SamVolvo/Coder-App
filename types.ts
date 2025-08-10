@@ -36,7 +36,7 @@ export interface FolderNode {
 export type TreeNode = FileNode | FolderNode;
 
 // --- AI Provider Types ---
-export type AiProvider = 'gemini' | 'ollama';
+export type AiProvider = 'gemini' | 'chatgpt' | 'ollama';
 
 export interface OllamaConfig {
   url: string;
