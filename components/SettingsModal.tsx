@@ -254,6 +254,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
                     </div>
                 )}
 
+                {provider === 'chatgpt' && (
+                    <div>
+                        <p className="text-slate-300 mb-2 text-sm">
+                          Enter your OpenAI API key. Your key is stored securely on your local machine.
+                        </p>
+                        <p className="text-xs text-slate-400 mb-3">
+                          Recommended model: <code>gpt-4o-mini</code> (supports coding, images, and file inputs)
+                        </p>
+                        <label htmlFor="apiKey" className="text-sm font-medium text-slate-400">OpenAI API Key</label>
+                        <div className="relative mt-1">
+                            <input id="apiKey" type={isKeyVisible ? 'text' : 'password'} value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder="Enter your API key here" className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 pr-10 text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200" autoFocus/>
+                            <button type="button" onClick={() => setIsKeyVisible(!isKeyVisible)} className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-200" title={isKeyVisible ? 'Hide key' : 'Show key'}>
+                                {isKeyVisible ? <EyeOffIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {provider === 'ollama' && (
                     <div>
                         <p className="text-slate-300 mb-2 text-sm">

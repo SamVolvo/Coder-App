@@ -235,7 +235,10 @@ const App: React.FC = () => {
         setChatgptApiKey(storedChatgptKey);
         setAiProvider(provider);
         setOllamaConfig(ollamaConf);
+
         if ((provider === 'gemini' && !storedGeminiKey) || (provider === 'chatgpt' && !storedChatgptKey)) setModalState({ type: 'settings', context: null });
+        if (!storedKey && (provider === 'gemini' || provider === 'chatgpt')) setModalState({ type: 'settings', context: null });
+
       } catch (e) {
         console.error("Failed to get settings:", e);
       }
@@ -583,8 +586,12 @@ const App: React.FC = () => {
   const closeModal = () => setModalState({ type: 'none', context: null });
   
   const isProviderConfigured =
+
     (aiProvider === 'gemini' && !!geminiApiKey) ||
     (aiProvider === 'chatgpt' && !!chatgptApiKey) ||
+
+    ((aiProvider === 'gemini' || aiProvider === 'chatgpt') && !!apiKey) ||
+
     (aiProvider === 'ollama' && !!ollamaConfig?.url && !!ollamaConfig?.model);
   const isProjectOpen = !!projectRoot;
   
