@@ -11,6 +11,7 @@ import InfoPanel from './components/InfoPanel';
 import MobileNav from './components/MobileNav';
 import { initializeChat, sendMessage as sendMessageGemini, getChatHistory, endChatSession } from './services/geminiService';
 import { sendMessage as sendMessageOllama } from './services/ollamaService';
+import { sendMessage as sendMessageChatGPT } from './services/chatgptService';
 import { ModalType, ModalContext, TreeNode, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext, AiProvider, OllamaConfig, CodeFile } from './types';
 import { Content, Part } from '@google/genai';
 
@@ -231,7 +232,7 @@ const App: React.FC = () => {
         setApiKey(storedKey);
         setAiProvider(provider);
         setOllamaConfig(ollamaConf);
-        if (!storedKey && provider === 'gemini') setModalState({ type: 'settings', context: null });
+        if (!storedKey && (provider === 'gemini' || provider === 'chatgpt')) setModalState({ type: 'settings', context: null });
       } catch (e) {
         console.error("Failed to get settings:", e);
       }
@@ -312,12 +313,16 @@ const App: React.FC = () => {
       const currentHistory = [...chatHistory];
       
       let response: { files: CodeFile[]; readmeContent: string };
-      
+
       if (aiProvider === 'ollama') {
         if (!ollamaConfig?.url || !ollamaConfig?.model) throw new Error("Ollama is not configured.");
         const projectContextForOllama = getFileTreeContextString(fileTree, activeFile, activeFileContent);
         console.log("[AI] Ollama Context:", projectContextForOllama);
         response = await sendMessageOllama(userContent, projectContextForOllama, currentHistory, ollamaConfig);
+      } else if (aiProvider === 'chatgpt') {
+        const projectContext = await getProjectContextString(projectRoot, fileTree, activeFile, activeFileContent);
+        console.log("[AI] ChatGPT Context:", projectContext);
+        response = await sendMessageChatGPT(userContent, projectContext, currentHistory);
       } else { // gemini
         const projectContext = await getProjectContextString(projectRoot, fileTree, activeFile, activeFileContent);
         console.log("[AI] Gemini Context:", projectContext);
@@ -573,7 +578,9 @@ const App: React.FC = () => {
 
   const closeModal = () => setModalState({ type: 'none', context: null });
   
-  const isProviderConfigured = (aiProvider === 'gemini' && !!apiKey) || (aiProvider === 'ollama' && !!ollamaConfig?.url && !!ollamaConfig?.model);
+  const isProviderConfigured =
+    ((aiProvider === 'gemini' || aiProvider === 'chatgpt') && !!apiKey) ||
+    (aiProvider === 'ollama' && !!ollamaConfig?.url && !!ollamaConfig?.model);
   const isProjectOpen = !!projectRoot;
   
   const renderModals = () => {
