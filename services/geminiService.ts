@@ -7,7 +7,7 @@ let chat: Chat | null = null;
 async function getAiInstance(): Promise<GoogleGenAI> {
     if (ai) return ai;
     if (!window.electronAPI) throw new Error("Electron API not available.");
-    const apiKey = await window.electronAPI.getApiKey();
+    const apiKey = await window.electronAPI.getGeminiApiKey();
     if (!apiKey) throw new Error("API key is not set. Please add it in Settings.");
     ai = new GoogleGenAI({ apiKey });
     return ai;
