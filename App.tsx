@@ -11,7 +11,7 @@ import InfoPanel from './components/InfoPanel';
 import MobileNav from './components/MobileNav';
 import { initializeChat, sendMessage as sendMessageGemini, getChatHistory, endChatSession } from './services/geminiService';
 import { sendMessage as sendMessageOllama } from './services/ollamaService';
-import { ModalType, ModalContext, TreeNode, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext, AiProvider, OllamaConfig } from './types';
+import { ModalType, ModalContext, TreeNode, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext, AiProvider, OllamaConfig, CodeFile } from './types';
 import { Content, Part } from '@google/genai';
 
 const getProjectContextString = async (root: string, tree: TreeNode[], activeFile: string | null, activeFileContent: string): Promise<string> => {
@@ -80,6 +80,15 @@ const getFileTreeContextString = (tree: TreeNode[], activeFile: string | null, a
     return `CONTEXT:\n` + contextParts.join('\n') + `\n\n`;
 };
 
+const thinkingMessages = [
+  "Analyzing your request...",
+  "Reviewing project context...",
+  "Consulting architectural patterns...",
+  "Planning file structure...",
+  "Generating code...",
+  "Writing documentation...",
+  "Finalizing response...",
+];
 
 const App: React.FC = () => {
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
@@ -97,6 +106,7 @@ const App: React.FC = () => {
   const [chatHistory, setChatHistory] = useState<Content[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [thinkingMessage, setThinkingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [modalState, setModalState] = useState<{ type: ModalType; context: ModalContext }>({ type: 'none', context: null });
@@ -104,6 +114,30 @@ const App: React.FC = () => {
   const debounceWriteFileRef = useRef<number | null>(null);
   const [mobileView, setMobileView] = useState<'controls' | 'code'>('controls');
 
+  const thinkingIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (isLoading) {
+      let i = 0;
+      setThinkingMessage(thinkingMessages[i]);
+      thinkingIntervalRef.current = window.setInterval(() => {
+        i = (i + 1) % thinkingMessages.length;
+        setThinkingMessage(thinkingMessages[i]);
+      }, 2000); // Change message every 2 seconds
+    } else {
+      if (thinkingIntervalRef.current) {
+        clearInterval(thinkingIntervalRef.current);
+        thinkingIntervalRef.current = null;
+      }
+      setThinkingMessage('');
+    }
+
+    return () => {
+      if (thinkingIntervalRef.current) {
+        clearInterval(thinkingIntervalRef.current);
+      }
+    };
+  }, [isLoading]);
 
   const refreshProject = useCallback(async (root: string) => {
     if (!window.electronAPI) return;
@@ -261,6 +295,7 @@ const App: React.FC = () => {
         setError("No project is open. Please open a folder first.");
         return;
     }
+    console.log(`[AI] Starting generation with ${aiProvider} provider.`);
     setIsLoading(true);
     setError(null);
     setRecentlyUpdatedPaths(new Set());
@@ -276,14 +311,16 @@ const App: React.FC = () => {
       setChatHistory(prev => prev.concat(userContent));
       const currentHistory = [...chatHistory];
       
-      let response;
+      let response: { files: CodeFile[]; readmeContent: string };
       
       if (aiProvider === 'ollama') {
         if (!ollamaConfig?.url || !ollamaConfig?.model) throw new Error("Ollama is not configured.");
         const projectContextForOllama = getFileTreeContextString(fileTree, activeFile, activeFileContent);
+        console.log("[AI] Ollama Context:", projectContextForOllama);
         response = await sendMessageOllama(userContent, projectContextForOllama, currentHistory, ollamaConfig);
       } else { // gemini
         const projectContext = await getProjectContextString(projectRoot, fileTree, activeFile, activeFileContent);
+        console.log("[AI] Gemini Context:", projectContext);
         const apiUserParts: Part[] = [{ text: `${projectContext}USER REQUEST: ${prompt}` }];
         if (imageBase64) {
             apiUserParts.push({ inlineData: { mimeType: 'image/png', data: imageBase64 } });
@@ -295,6 +332,7 @@ const App: React.FC = () => {
         response = await sendMessageGemini(apiUserContent);
       }
       
+      console.log("[AI] Generation successful. Parsed response:", response);
       const updatedPaths = new Set<string>();
       for (const file of response.files) {
         await window.electronAPI.writeFile({ projectRoot, relativePath: file.fileName, content: file.code });
@@ -344,6 +382,7 @@ const App: React.FC = () => {
 
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+      console.error("[AI] Generation failed:", err);
       setError(message);
       // Revert optimistic UI update on error
       setChatHistory(prev => prev.slice(0, -1));
@@ -612,6 +651,7 @@ const App: React.FC = () => {
             <CodeDisplay
                 code={activeFileContent}
                 isLoading={isLoading}
+                thinkingMessage={thinkingMessage}
                 error={error}
                 fileName={activeFile}
                 hasFiles={fileTree.length > 0}

@@ -314,6 +314,7 @@ ipcMain.handle('get-ollama-models', (event, url) => {
 
 ipcMain.handle('invoke-ollama', (event, { config, messages }) => {
     return new Promise((resolve, reject) => {
+        log.info(`[Ollama] Invoking model '${config.model}' at '${config.url}'`);
         const payload = JSON.stringify({
             model: config.model,
             messages,
@@ -339,8 +340,9 @@ ipcMain.handle('invoke-ollama', (event, { config, messages }) => {
             let responseBody = '';
 
             request.on('response', (response) => {
+                log.info(`[Ollama] Received response with status code: ${response.statusCode}`);
                 if (response.statusCode < 200 || response.statusCode >= 300) {
-                    log.error(`Ollama request failed with status: ${response.statusCode}`);
+                    log.error(`[Ollama] Request failed with status: ${response.statusCode}`);
                     reject(new Error(`Ollama server responded with status code ${response.statusCode}`));
                     return;
                 }
@@ -351,27 +353,29 @@ ipcMain.handle('invoke-ollama', (event, { config, messages }) => {
                     try {
                         const parsed = JSON.parse(responseBody);
                         if (parsed.error) {
-                            log.error('Ollama API error:', parsed.error);
+                            log.error('[Ollama] API returned an error:', parsed.error);
                             reject(new Error(parsed.error));
                         } else {
+                            log.info(`[Ollama] Request successful, returning content of length ${parsed.message.content.length}`);
                             resolve(parsed.message.content);
                         }
                     } catch (e) {
-                        log.error('Failed to parse Ollama response:', e);
+                        log.error('[Ollama] Failed to parse response from Ollama.', e);
+                        log.debug('[Ollama] Raw response body:', responseBody);
                         reject(new Error('Failed to parse Ollama response.'));
                     }
                 });
             });
 
             request.on('error', (error) => {
-                log.error('Error invoking Ollama:', error);
+                log.error('[Ollama] Request error:', error);
                 reject(new Error(`Could not connect to Ollama server at ${config.url}. Make sure it's running.`));
             });
 
             request.write(payload);
             request.end();
         } catch (e) {
-            log.error('Invalid Ollama URL provided:', config.url, e);
+            log.error('[Ollama] Invalid URL or other setup error:', config.url, e);
             reject(new Error(`The Ollama server URL "${config.url}" is not a valid URL.`));
         }
     });

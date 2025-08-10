@@ -5,13 +5,14 @@ import { CopyIcon, CheckIcon, CodeIcon, ExclamationIcon } from './icons';
 interface CodeDisplayProps {
   code: string;
   isLoading: boolean;
+  thinkingMessage: string;
   error: string | null;
   fileName: string | null;
   hasFiles: boolean;
   onCodeChange: (newCode: string) => void;
 }
 
-const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, fileName, hasFiles, onCodeChange }) => {
+const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, thinkingMessage, error, fileName, hasFiles, onCodeChange }) => {
   const [isCopied, setIsCopied] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -31,11 +32,12 @@ const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, error, fileN
   };
   
   const renderContent = () => {
-    if (isLoading && !hasFiles) {
+    if (isLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-slate-400">
           <LoadingSpinner />
-          <p className="mt-4 text-lg">Generating Code...</p>
+          <p className="mt-4 text-lg">{hasFiles ? "Updating project..." : "Generating Code..."}</p>
+          {thinkingMessage && <p className="mt-2 text-sm text-slate-500">{thinkingMessage}</p>}
         </div>
       );
     }
