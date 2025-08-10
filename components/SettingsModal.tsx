@@ -219,6 +219,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSave, 
                         <p className="text-slate-300 mb-2 text-sm">
                           Enter your Google Gemini API key. Your key is stored securely on your local machine.
                         </p>
+                        <p className="text-xs text-slate-400 mb-3">
+                          Recommended model: <code>gemini-2.5-flash</code> (supports coding, images, and file inputs)
+                        </p>
                         <label htmlFor="apiKey" className="text-sm font-medium text-slate-400">Gemini API Key</label>
                         <div className="relative mt-1">
                             <input id="apiKey" type={isKeyVisible ? 'text' : 'password'} value={apiKeyInput} onChange={(e) => setApiKeyInput(e.target.value)} placeholder="Enter your API key here" className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 pr-10 text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200" autoFocus/>
