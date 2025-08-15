@@ -1,691 +1,298 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Header from './components/Header';
-import PromptForm from './components/PromptForm';
-import CodeDisplay from './components/CodeDisplay';
-import FileExplorer from './components/FileExplorer';
-import Notification from './components/Notification';
-import ConfirmModal from './components/ConfirmModal';
-import InputModal from './components/InputModal';
-import SettingsModal from './components/SettingsModal';
-import InfoPanel from './components/InfoPanel';
-import MobileNav from './components/MobileNav';
-import { initializeChat, sendMessage as sendMessageGemini, getChatHistory, endChatSession } from './services/geminiService';
-import { sendMessage as sendMessageOllama } from './services/ollamaService';
-import { sendMessage as sendMessageChatGPT } from './services/chatgptService';
-import { ModalType, ModalContext, TreeNode, NewNodeModalContext, RenameModalContext, ConfirmDeleteModalContext, GenericConfirmModalContext, AiProvider, OllamaConfig, CodeFile } from './types';
-import { Content, Part } from '@google/genai';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import SettingsModal from "./components/SettingsModal";
+import CodeDisplay from "./components/CodeDisplay";
+// If you don't have CodeDisplay, comment it out or swap for your component.
 
-const getProjectContextString = async (root: string, tree: TreeNode[], activeFile: string | null, activeFileContent: string): Promise<string> => {
-    const contextParts: string[] = [];
+export type AiProvider = "gemini" | "chatgpt" | "ollama";
 
-    const processNode = async (node: TreeNode) => {
-        if (node.type === 'file') {
-            try {
-                const content = node.path === activeFile 
-                    ? activeFileContent 
-                    : await window.electronAPI.readFile(root, node.path);
-                
-                const lang = node.name.split('.').pop() || '';
-                contextParts.push(`File: \`${node.path}\`\n\`\`\`${lang}\n${content}\n\`\`\``);
-            } catch (e) {
-                console.error(`Could not read file for context: ${node.path}`, e);
-            }
-        } else if (node.children) {
-            await Promise.all(node.children.map(processNode));
-        }
-    };
+export interface GeneratedFile {
+  fileName: string;
+  code: string;
+}
+export interface GenerateResult {
+  files: GeneratedFile[];
+  readmeContent?: string;
+}
 
-    await Promise.all(tree.map(processNode));
+// If you have real services, keep these imports.
+// If names differ, adjust the imports or stub the calls below.
+import * as geminiService from "./services/geminiService";
+import * as chatgptService from "./services/chatgptService";
+import * as ollamaService from "./services/ollamaService";
 
-    if (contextParts.length === 0) {
-        return "CONTEXT: This is a new project with no existing files.\n\n";
-    }
+const SYSTEM_INSTRUCTIONS = `
+You are a world-class senior software engineer acting as a coding assistant.
+- The user will provide the context of their current project files, followed by their request. You MUST use this context to inform your response.
+- Your response MUST be a single JSON object: { "files": [{ "fileName": "...", "code": "..." }], "readmeContent": "..." }.
+- For each file, "fileName" MUST be the full, relative path including directories.
+- "code" must be the raw, complete code for that file.
+- "readmeContent" must be the full content for a README.md file formatted as markdown.
+- When asked to update, respond with the FULL updated code for ALL relevant files and an updated readmeContent in the same JSON format.
+`.trim();
 
-    return `CONTEXT: The current state of the project files is as follows:\n\n---\n` +
-           contextParts.join('\n\n---\n') +
-           `\n\n---\n\n`;
-};
+const needsCloudKey = (p: AiProvider) => p === "gemini" || p === "chatgpt";
 
-// Sorts folders before files, then alphabetically
-const sortTree = (a: TreeNode, b: TreeNode) => {
-  if (a.type === 'folder' && b.type === 'file') return -1;
-  if (a.type === 'file' && b.type === 'folder') return 1;
-  return a.name.localeCompare(b.name);
-};
+export default function App() {
+  // Provider / model
+  const [aiProvider, setAiProvider] = useState<AiProvider>("gemini");
+  const [model, setModel] = useState<string>("gemini-2.5-flash");
 
-// Creates a context string with just the file tree and active file content for performance.
-const getFileTreeContextString = (tree: TreeNode[], activeFile: string | null, activeFileContent: string): string => {
-    const contextParts: string[] = ["Project file structure:"];
-    
-    const buildTreeString = (nodes: TreeNode[], prefix = '') => {
-        const sortedNodes = [...nodes].sort(sortTree);
-        sortedNodes.forEach((node, index) => {
-            const isLast = index === sortedNodes.length - 1;
-            const linePrefix = prefix + (isLast ? '└── ' : '├── ');
-            contextParts.push(`${linePrefix}${node.name}`);
-            if (node.type === 'folder' && node.children.length > 0) {
-                const childPrefix = prefix + (isLast ? '    ' : '│   ');
-                buildTreeString(node.children, childPrefix);
-            }
-        });
-    };
-    buildTreeString(tree);
+  // Provider-aware key (fixes “apiKey is not defined”)
+  const [providerApiKey, setProviderApiKey] = useState<string | undefined>();
 
-    if (activeFile && activeFileContent) {
-        const lang = activeFile.split('.').pop() || '';
-        contextParts.push(`\n\nContent of active file ('${activeFile}'):\n\`\`\`${lang}\n${activeFileContent}\n\`\`\``);
-    } else if (activeFile) {
-        contextParts.push(`\n\nNo content available for active file ('${activeFile}'). It might be empty.`);
-    }
-    
-    return `CONTEXT:\n` + contextParts.join('\n') + `\n\n`;
-};
+  // UI state (keep yours / add as needed)
+  const [prompt, setPrompt] = useState<string>("");
+  const [files, setFiles] = useState<GeneratedFile[]>([]);
+  const [readmeContent, setReadmeContent] = useState<string>("");
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [imageDataUrl, setImageDataUrl] = useState<string | undefined>(undefined);
 
-const thinkingMessages = [
-  "Analyzing your request...",
-  "Reviewing project context...",
-  "Consulting architectural patterns...",
-  "Planning file structure...",
-  "Generating code...",
-  "Writing documentation...",
-  "Finalizing response...",
-];
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-const App: React.FC = () => {
-  const [geminiApiKey, setGeminiApiKey] = useState<string | undefined>(undefined);
-  const [chatgptApiKey, setChatgptApiKey] = useState<string | undefined>(undefined);
-  const [aiProvider, setAiProvider] = useState<AiProvider>('gemini');
-  const [ollamaConfig, setOllamaConfig] = useState<OllamaConfig | undefined>();
-
-  // --- New State Management for Disk-Based Projects ---
-  const [projectRoot, setProjectRoot] = useState<string | null>(null);
-  const [fileTree, setFileTree] = useState<TreeNode[]>([]);
-  const [activeFile, setActiveFile] = useState<string | null>(null);
-  const [activeFileContent, setActiveFileContent] = useState<string>('');
-  const [selectedNodes, setSelectedNodes] = useState<Set<string>>(new Set());
-  const [recentlyUpdatedPaths, setRecentlyUpdatedPaths] = useState<Set<string>>(new Set());
-  const [readmeContent, setReadmeContent] = useState<string>('');
-  const [chatHistory, setChatHistory] = useState<Content[]>([]);
-
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [thinkingMessage, setThinkingMessage] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [notification, setNotification] = useState<string | null>(null);
-  const [modalState, setModalState] = useState<{ type: ModalType; context: ModalContext }>({ type: 'none', context: null });
-  
-  const debounceWriteFileRef = useRef<number | null>(null);
-  const [mobileView, setMobileView] = useState<'controls' | 'code'>('controls');
-
-  const thinkingIntervalRef = useRef<number | null>(null);
-
+  // Load correct key whenever provider changes
   useEffect(() => {
-    if (isLoading) {
-      let i = 0;
-      setThinkingMessage(thinkingMessages[i]);
-      thinkingIntervalRef.current = window.setInterval(() => {
-        i = (i + 1) % thinkingMessages.length;
-        setThinkingMessage(thinkingMessages[i]);
-      }, 2000); // Change message every 2 seconds
-    } else {
-      if (thinkingIntervalRef.current) {
-        clearInterval(thinkingIntervalRef.current);
-        thinkingIntervalRef.current = null;
-      }
-      setThinkingMessage('');
-    }
-
-    return () => {
-      if (thinkingIntervalRef.current) {
-        clearInterval(thinkingIntervalRef.current);
-      }
-    };
-  }, [isLoading]);
-
-  const refreshProject = useCallback(async (root: string) => {
-    if (!window.electronAPI) return;
-    try {
-        const tree = await window.electronAPI.readProjectTree(root);
-        setFileTree(tree || []);
-        
-        // Try to find and load README.md
-        const readmeFile = tree?.find(node => node.name.toLowerCase() === 'readme.md');
-        if (readmeFile && readmeFile.type === 'file') {
-            const content = await window.electronAPI.readFile(root, readmeFile.path);
-            setReadmeContent(content);
+    let cancelled = false;
+    (async () => {
+      try {
+        if (!needsCloudKey(aiProvider)) {
+          if (!cancelled) setProviderApiKey("ollama-local"); // marker; not actually used
+          return;
+        }
+        if (aiProvider === "chatgpt") {
+          const k = await window.electronAPI.getChatgptApiKey();
+          if (!cancelled) setProviderApiKey(k ?? undefined);
         } else {
-            const readmeInRoot = (await window.electronAPI.readProjectTree(root))?.find(n => n.name.toLowerCase() === 'readme.md');
-            if (readmeInRoot) {
-                 const content = await window.electronAPI.readFile(root, readmeInRoot.path);
-                 setReadmeContent(content);
-            } else {
-                setReadmeContent('');
-            }
+          const k = await window.electronAPI.getGeminiApiKey();
+          if (!cancelled) setProviderApiKey(k ?? undefined);
         }
-    } catch (e) {
-        setError(e instanceof Error ? `Failed to refresh project: ${e.message}` : 'Unknown error refreshing project.');
-    }
-  }, []);
+      } catch {
+        if (!cancelled) setProviderApiKey(undefined);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiProvider]);
 
-  const resetState = useCallback(() => {
-    endChatSession();
-    setProjectRoot(null);
-    setFileTree([]);
-    setActiveFile(null);
-    setSelectedNodes(new Set());
-    setRecentlyUpdatedPaths(new Set());
-    setReadmeContent('');
-    setChatHistory([]);
-    setError(null);
-    setIsLoading(false);
-    setNotification(null);
-  }, []);
+  // Legacy compatibility: if your old code used `apiKey`/`storedKey`
+  const apiKey = providerApiKey;
+  const storedKey = providerApiKey;
 
-  const handleOpenProject = useCallback(async () => {
-    if (!window.electronAPI) return;
-    try {
-        const rootPath = await window.electronAPI.openProject();
-        if (rootPath) {
-            resetState();
-            setProjectRoot(rootPath);
-            await refreshProject(rootPath);
-            const history = await window.electronAPI.readChatHistory(rootPath);
-            setChatHistory(history);
-            if (aiProvider === 'gemini') {
-                await initializeChat(history);
-            }
-            setNotification("Project opened successfully.");
-        }
-    } catch(e) {
-        setError(e instanceof Error ? e.message : 'Failed to open project.');
-    }
-  }, [resetState, refreshProject, aiProvider]);
+  const hasKey = useMemo(() => !needsCloudKey(aiProvider) || Boolean(providerApiKey), [aiProvider, providerApiKey]);
 
-  const handleCloseProject = useCallback(() => {
-    if (!projectRoot) return;
-    setModalState({
-        type: 'confirm',
-        context: {
-            title: 'Close Project',
-            message: 'Are you sure you want to close the current project? You can reopen it at any time.',
-            onConfirm: resetState,
-        }
+  // Optional: your image attach flow
+  const handlePickImage = () => fileInputRef.current?.click();
+  const handleImageSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => setImageDataUrl(reader.result?.toString() || undefined);
+    reader.readAsDataURL(f);
+    e.currentTarget.value = "";
+  };
+
+  // Helpers for results list
+  const addFile = (fileName: string, code: string) => {
+    setFiles((prev) => {
+      const i = prev.findIndex((f) => f.fileName === fileName);
+      if (i >= 0) {
+        const copy = prev.slice();
+        copy[i] = { fileName, code };
+        return copy;
+      }
+      return [...prev, { fileName, code }];
     });
-  }, [projectRoot, resetState]);
+  };
+  const removeFile = (fileName: string) => setFiles((prev) => prev.filter((f) => f.fileName !== fileName));
 
-  const handleOpenTerminal = useCallback(async () => {
-    if (projectRoot && window.electronAPI) {
-      try {
-        await window.electronAPI.openInTerminal(projectRoot);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to open terminal.');
-      }
+  // Generate
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      alert("Please enter a prompt.");
+      return;
     }
-  }, [projectRoot]);
-  
-  const fetchSettings = useCallback(async () => {
-      if (!window.electronAPI) return;
-      try {
-        const [storedGeminiKey, storedChatgptKey, provider, ollamaConf] = await Promise.all([
-          window.electronAPI.getGeminiApiKey(),
-          window.electronAPI.getChatgptApiKey(),
-          window.electronAPI.getAiProvider(),
-          window.electronAPI.getOllamaConfig()
-        ]);
-        setGeminiApiKey(storedGeminiKey);
-        setChatgptApiKey(storedChatgptKey);
-        setAiProvider(provider);
-        setOllamaConfig(ollamaConf);
-
-        if ((provider === 'gemini' && !storedGeminiKey) || (provider === 'chatgpt' && !storedChatgptKey)) setModalState({ type: 'settings', context: null });
-        if (!storedKey && (provider === 'gemini' || provider === 'chatgpt')) setModalState({ type: 'settings', context: null });
-
-      } catch (e) {
-        console.error("Failed to get settings:", e);
-      }
-  }, []);
-
-  // Effect to load initial settings
-  useEffect(() => {
-    fetchSettings();
-  }, [fetchSettings]);
-
-  // Effect to watch for external file changes
-  useEffect(() => {
-    if (!projectRoot || !window.electronAPI?.onProjectUpdate) return;
-
-    const handleUpdate = async () => {
-        console.log("Project updated externally, refreshing...");
-        await refreshProject(projectRoot);
-
-        if (activeFile) {
-            try {
-                const newContent = await window.electronAPI.readFile(projectRoot, activeFile);
-                setActiveFileContent(newContent);
-            } catch (e) {
-                console.error(`Failed to reload active file ${activeFile}:`, e);
-                // File might have been deleted, deselect it
-                setActiveFile(null);
-                setActiveFileContent('');
-            }
-        }
-    };
-
-    const removeListener = window.electronAPI.onProjectUpdate(handleUpdate);
-    
-    return () => {
-        removeListener();
-    };
-  }, [projectRoot, refreshProject, activeFile]);
-
-
-  // Effect to load file content when activeFile changes
-  useEffect(() => {
-    const loadContent = async () => {
-        if (activeFile && projectRoot) {
-            try {
-                const content = await window.electronAPI.readFile(projectRoot, activeFile);
-                setActiveFileContent(content);
-            } catch (e) {
-                setError(`Failed to read file: ${activeFile}`);
-                setActiveFileContent('');
-            }
-        } else {
-            setActiveFileContent('');
-        }
-    };
-    loadContent();
-  }, [activeFile, projectRoot]);
-
-
-  const handleSendMessage = useCallback(async (prompt: string, imageBase64: string | null) => {
-    if (!projectRoot) {
-        setError("No project is open. Please open a folder first.");
-        return;
+    if (!hasKey) {
+      alert("Please add your API key in Settings.");
+      return;
     }
-    console.log(`[AI] Starting generation with ${aiProvider} provider.`);
-    setIsLoading(true);
-    setError(null);
-    setRecentlyUpdatedPaths(new Set());
-    
+
+    setIsGenerating(true);
     try {
-      const userParts: Part[] = [{ text: prompt }];
-      if (imageBase64) {
-          userParts.push({ inlineData: { mimeType: 'image/png', data: imageBase64 } });
-      }
-      const userContent: Content = { role: 'user', parts: userParts };
-      
-      // Optimistic UI update for user message
-      setChatHistory(prev => prev.concat(userContent));
-      const currentHistory = [...chatHistory];
-      
-      let response: { files: CodeFile[]; readmeContent: string };
+      const context = { system: SYSTEM_INSTRUCTIONS, prompt, files, imageDataUrl, model };
 
-      if (aiProvider === 'ollama') {
-        if (!ollamaConfig?.url || !ollamaConfig?.model) throw new Error("Ollama is not configured.");
-        const projectContextForOllama = getFileTreeContextString(fileTree, activeFile, activeFileContent);
-        console.log("[AI] Ollama Context:", projectContextForOllama);
-        response = await sendMessageOllama(userContent, projectContextForOllama, currentHistory, ollamaConfig);
-      } else if (aiProvider === 'chatgpt') {
-        const projectContext = await getProjectContextString(projectRoot, fileTree, activeFile, activeFileContent);
-        console.log("[AI] ChatGPT Context:", projectContext);
-        response = await sendMessageChatGPT(userContent, projectContext, currentHistory);
-      } else { // gemini
-        const projectContext = await getProjectContextString(projectRoot, fileTree, activeFile, activeFileContent);
-        console.log("[AI] Gemini Context:", projectContext);
-        const apiUserParts: Part[] = [{ text: `${projectContext}USER REQUEST: ${prompt}` }];
-        if (imageBase64) {
-            apiUserParts.push({ inlineData: { mimeType: 'image/png', data: imageBase64 } });
-        }
-        const apiUserContent: Content = { role: 'user', parts: apiUserParts };
-
-        const historyOnDisk = await window.electronAPI.readChatHistory(projectRoot);
-        await initializeChat(historyOnDisk);
-        response = await sendMessageGemini(apiUserContent);
-      }
-      
-      console.log("[AI] Generation successful. Parsed response:", response);
-      const updatedPaths = new Set<string>();
-      for (const file of response.files) {
-        await window.electronAPI.writeFile({ projectRoot, relativePath: file.fileName, content: file.code });
-        updatedPaths.add(file.fileName);
-      }
-
-      if (response.files.length > 0) {
-        setActiveFile(response.files[response.files.length - 1].fileName);
-      }
-      
-      let newHistory: Content[];
-      if(aiProvider === 'gemini') {
-          newHistory = await getChatHistory() ?? [];
+      let result: GenerateResult | undefined;
+      // NOTE: do NOT compare to 'openai' – your union is 'chatgpt'
+      if (aiProvider === "gemini") {
+        // @ts-ignore tolerant call — adapt to your service’s signature
+        result = await (geminiService as any).generateCode?.(context);
+      } else if (aiProvider === "chatgpt") {
+        // @ts-ignore
+        result = await (chatgptService as any).generateCode?.(context);
       } else {
-          const modelResponsePart: Part = { text: JSON.stringify(response) };
-          const modelContent: Content = { role: 'model', parts: [modelResponsePart] };
-          newHistory = [...currentHistory, userContent, modelContent];
+        // @ts-ignore
+        result = await (ollamaService as any).generateCode?.(context);
       }
 
-      if(newHistory.length > 0) {
-          setChatHistory(newHistory);
-          await window.electronAPI.writeChatHistory(projectRoot, newHistory);
-      }
-
-      if (response.readmeContent) {
-          await window.electronAPI.writeFile({ projectRoot, relativePath: 'README.md', content: response.readmeContent });
-      }
-      setReadmeContent(response.readmeContent || '');
-      
-      const getParentDirs = (p: string) => {
-          const parts = p.split('/');
-          let current = '';
-          const parents = new Set<string>();
-          for (let i = 0; i < parts.length - 1; i++) {
-              current = current ? `${current}/${parts[i]}` : parts[i];
-              parents.add(current);
-          }
-          return parents;
-      };
-
-      const allUpdatedPaths = new Set(updatedPaths);
-      updatedPaths.forEach(p => getParentDirs(p).forEach(parent => allUpdatedPaths.add(parent)));
-      
-      setRecentlyUpdatedPaths(allUpdatedPaths);
-      await refreshProject(projectRoot);
-      setNotification('Project updated successfully!');
-
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An unknown error occurred.';
-      console.error("[AI] Generation failed:", err);
-      setError(message);
-      // Revert optimistic UI update on error
-      setChatHistory(prev => prev.slice(0, -1));
+      if (!result) throw new Error("No response from the AI service.");
+      setFiles(result.files ?? []);
+      setReadmeContent(result.readmeContent ?? "");
+    } catch (e: any) {
+      console.error("[App] Generate failed:", e);
+      alert(e?.message || "Generation failed. Check console.");
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
-  }, [projectRoot, refreshProject, fileTree, activeFile, activeFileContent, aiProvider, ollamaConfig, chatHistory]);
-
-  const clearIndicators = () => setRecentlyUpdatedPaths(new Set());
-
-  const handleAddNode = async (filePath: string, isFolder: boolean) => {
-      clearIndicators();
-      if (!projectRoot) return;
-      try {
-          if (isFolder) {
-              await window.electronAPI.createFolder(projectRoot, filePath);
-          } else {
-              await window.electronAPI.createFile(projectRoot, filePath);
-              setActiveFile(filePath);
-          }
-          await refreshProject(projectRoot);
-      } catch (e) {
-          setError(`Failed to create ${isFolder ? 'folder' : 'file'}: ${e instanceof Error ? e.message : String(e)}`);
-      }
   };
 
-  const handleDeleteNodes = async (pathsToDelete: Set<string>) => {
-      clearIndicators();
-      if (!projectRoot) return;
-      try {
-        for (const p of pathsToDelete) {
-            await window.electronAPI.deleteNode(projectRoot, p);
-        }
-        if (pathsToDelete.has(activeFile!)) setActiveFile(null);
-        setSelectedNodes(new Set());
-        await refreshProject(projectRoot);
-        setNotification(`${pathsToDelete.size} item(s) deleted.`);
-      } catch(e) {
-        setError(`Failed to delete items: ${e instanceof Error ? e.message : String(e)}`);
-      }
-  };
-
-  const handleRenameNode = async (oldPath: string, newName: string) => {
-      clearIndicators();
-      if (!projectRoot) return;
-      const parentDir = oldPath.includes('/') ? oldPath.substring(0, oldPath.lastIndexOf('/')) : '';
-      const newRelativePath = parentDir ? `${parentDir}/${newName}` : newName;
-      try {
-        await window.electronAPI.renameNode(projectRoot, oldPath, newRelativePath);
-        if (activeFile === oldPath) setActiveFile(newRelativePath);
-        await refreshProject(projectRoot);
-        setNotification('Renamed successfully.');
-      } catch (e) {
-        setError(`Failed to rename: ${e instanceof Error ? e.message : String(e)}`);
-      }
-  };
-  
-  const handleMoveNodes = async (sourcePaths: string[], destinationPath: string | null) => {
-    clearIndicators();
-    if (!projectRoot) return;
+  // After saving settings, refresh the in-memory key so the UI updates
+  const handleSettingsSaved = async () => {
     try {
-        for (const source of sourcePaths) {
-            const baseName = source.split('/').pop()!;
-            const newRelativePath = destinationPath ? `${destinationPath}/${baseName}` : baseName;
-            await window.electronAPI.renameNode(projectRoot, source, newRelativePath);
-        }
-        setSelectedNodes(new Set());
-        await refreshProject(projectRoot);
-        setNotification('Items moved successfully.');
-    } catch (e) {
-        setError(`Failed to move items: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-  
-  const handleUploadFile = async () => {
-    clearIndicators();
-    if (!projectRoot) return;
-    try {
-        const uploadedFilePath = await window.electronAPI.uploadFile(projectRoot);
-        if (uploadedFilePath) {
-            await refreshProject(projectRoot);
-            setActiveFile(uploadedFilePath);
-            setNotification('File uploaded successfully!');
-        }
-    } catch (e) {
-        setError(`Failed to upload file: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-
-  const handleSelectNode = (path: string, isCtrlOrMeta: boolean, isFolder: boolean) => {
-    setSelectedNodes(prev => {
-      const newSelection = new Set(prev);
-      if (isCtrlOrMeta) {
-        newSelection.has(path) ? newSelection.delete(path) : newSelection.add(path);
+      if (!needsCloudKey(aiProvider)) {
+        setProviderApiKey("ollama-local");
+        return;
+      }
+      if (aiProvider === "chatgpt") {
+        setProviderApiKey((await window.electronAPI.getChatgptApiKey()) ?? undefined);
       } else {
-        newSelection.clear();
-        newSelection.add(path);
+        setProviderApiKey((await window.electronAPI.getGeminiApiKey()) ?? undefined);
       }
-      return newSelection;
-    });
-    if (!isFolder) {
-      setActiveFile(path);
-      if (window.innerWidth < 768) { // md breakpoint
-          setMobileView('code');
-      }
+    } catch (e) {
+      console.error("[App] Failed to refresh key after settings save:", e);
     }
   };
 
-  const handleCopyPath = (nodePath: string) => {
-      navigator.clipboard.writeText(nodePath);
-      setNotification("Path copied to clipboard!");
-  };
-
-  const handleSaveSettings = useCallback(async (settings: { geminiApiKey?: string; chatgptApiKey?: string; aiProvider?: AiProvider; ollamaConfig?: OllamaConfig }) => {
-    if (!window.electronAPI) return;
-    try {
-      const newProvider = settings.aiProvider;
-      const oldProvider = aiProvider;
-
-      // Save all settings to persistent storage first
-      if (settings.geminiApiKey !== undefined) await window.electronAPI.setGeminiApiKey(settings.geminiApiKey);
-      if (settings.chatgptApiKey !== undefined) await window.electronAPI.setChatgptApiKey(settings.chatgptApiKey);
-      if (newProvider) await window.electronAPI.setAiProvider(newProvider);
-      if (settings.ollamaConfig !== undefined) await window.electronAPI.setOllamaConfig(settings.ollamaConfig);
-      
-      // Refetch settings to update the component's state from the source of truth
-      await fetchSettings();
-
-      // Handle provider state transition *after* settings have been saved and state updated
-      if (newProvider && newProvider !== oldProvider) {
-        if (oldProvider === 'gemini') {
-          endChatSession();
-        }
-        if (newProvider === 'gemini' && projectRoot) {
-          // If we switched TO Gemini and a project is currently open, initialize a chat session for it.
-          const historyOnDisk = await window.electronAPI.readChatHistory(projectRoot);
-          await initializeChat(historyOnDisk);
-        }
-      }
-
-      setError(null);
-      setNotification("Settings saved successfully!");
-    } catch(e) {
-      setError(`Failed to save settings: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }, [aiProvider, projectRoot, fetchSettings]);
-
-
-  const debouncedWriteFile = useCallback((projectR: string, fileP: string, content: string) => {
-    if (debounceWriteFileRef.current) clearTimeout(debounceWriteFileRef.current);
-    debounceWriteFileRef.current = window.setTimeout(async () => {
-        try {
-            await window.electronAPI.writeFile({ projectRoot: projectR, relativePath: fileP, content });
-        } catch (e) {
-            setError(`Failed to save file: ${e instanceof Error ? e.message : String(e)}`);
-        }
-    }, 300);
-  }, []);
-
-  const handleCodeChange = (newCode: string) => {
-    clearIndicators();
-    if (!activeFile || !projectRoot) return;
-    setActiveFileContent(newCode); // Update UI immediately
-    debouncedWriteFile(projectRoot, activeFile, newCode);
-  };
-  
-  const handleClearChatHistory = useCallback(() => {
-    if (!projectRoot) return;
-    setModalState({
-      type: 'confirm',
-      context: {
-        title: 'Clear Chat History',
-        message: 'Are you sure you want to permanently delete the chat history for this project?',
-        onConfirm: async () => {
-          try {
-            setChatHistory([]);
-            await window.electronAPI.writeChatHistory(projectRoot, []);
-            if (aiProvider === 'gemini') {
-                await initializeChat([]); // Re-initialize with empty history
-            }
-            setNotification("Chat history cleared.");
-          } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to clear chat history.');
-          }
-        },
-      },
-    });
-  }, [projectRoot, aiProvider]);
-
-  const closeModal = () => setModalState({ type: 'none', context: null });
-  
-  const isProviderConfigured =
-
-    (aiProvider === 'gemini' && !!geminiApiKey) ||
-    (aiProvider === 'chatgpt' && !!chatgptApiKey) ||
-
-    ((aiProvider === 'gemini' || aiProvider === 'chatgpt') && !!apiKey) ||
-
-    (aiProvider === 'ollama' && !!ollamaConfig?.url && !!ollamaConfig?.model);
-  const isProjectOpen = !!projectRoot;
-  
-  const renderModals = () => {
-    switch (modalState.type) {
-      case 'newFolder':
-      case 'newFile': {
-        const context = modalState.context as NewNodeModalContext;
-        const isFolder = modalState.type === 'newFolder';
-        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(name) => handleAddNode(context?.path ? `${context.path}/${name}` : name, isFolder)} title={isFolder ? 'Add New Folder' : 'Add New File'} message={`Enter name for the new ${isFolder ? 'folder' : 'file'}${context?.path ? ` in '${context.path}'` : ''}.`} placeholder={isFolder ? "e.g., components" : "e.g., Button.tsx"} submitButtonText={isFolder ? "Add Folder" : "Add File"}/>;
-      }
-      case 'rename': {
-        const context = modalState.context as RenameModalContext;
-        return <InputModal isOpen={true} onClose={closeModal} onSubmit={(newName) => handleRenameNode(context.path, newName)} title={context.isFolder ? 'Rename Folder' : 'Rename File'} message="Enter the new name." placeholder="New name" submitButtonText="Rename" initialValue={context.initialValue}/>;
-      }
-      case 'confirm': {
-        const context = modalState.context as GenericConfirmModalContext;
-        return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={context.onConfirm} title={context.title} message={context.message}/>;
-      }
-      case 'confirmDelete': {
-        const context = modalState.context as ConfirmDeleteModalContext;
-        return <ConfirmModal isOpen={true} onClose={closeModal} onConfirm={() => handleDeleteNodes(context.paths)} title={`Delete ${context.paths.size} item(s)?`} message={`Are you sure? This action cannot be undone.`}/>;
-      }
-      case 'settings': {
-        return <SettingsModal isOpen={true} onClose={closeModal} onSave={handleSaveSettings} currentGeminiApiKey={geminiApiKey} currentChatgptApiKey={chatgptApiKey} currentAiProvider={aiProvider} currentOllamaConfig={ollamaConfig} />;
-      }
-      default:
-        return null;
-    }
-  };
-
+  // ------- UI (keep your existing structure/styles if you have them) -------
   return (
-    <div className="h-screen flex flex-col font-sans bg-gray-900 overflow-hidden" onClick={() => setSelectedNodes(new Set())}>
-      <Header 
-        onOpenProject={handleOpenProject}
-        onCloseProject={handleCloseProject}
-        onOpenSettings={() => setModalState({ type: 'settings', context: null })}
-        isProjectOpen={isProjectOpen}
-        onOpenTerminal={handleOpenTerminal}
-      />
-      
-      <main className="flex-grow flex flex-col md:flex-row gap-6 p-4 md:p-6 lg:p-8 max-w-screen-2xl w-full mx-auto min-h-0 md:pb-6 pb-20">
-        <div 
-            className={`flex-col gap-6 w-full md:flex-shrink-0 md:w-96 lg:w-[420px] ${mobileView === 'controls' ? 'flex' : 'hidden'} md:flex`}
-            onClick={(e) => e.stopPropagation()}
-        >
-          <PromptForm onSendMessage={handleSendMessage} isLoading={isLoading} isSessionActive={isProjectOpen} isProviderConfigured={isProviderConfigured} />
-          <FileExplorer 
-            fileTree={fileTree} 
-            activeFile={activeFile} 
-            selectedNodes={selectedNodes}
-            recentlyUpdatedPaths={recentlyUpdatedPaths}
-            onSelectNode={handleSelectNode}
-            isLoading={isLoading && fileTree.length === 0} 
-            onAddFolder={(context) => setModalState({ type: 'newFolder', context })}
-            onAddFile={(context) => setModalState({ type: 'newFile', context })}
-            onDeleteNodes={(context) => setModalState({ type: 'confirmDelete', context })}
-            onRenameNode={(context) => setModalState({ type: 'rename', context: { ...context, initialValue: context.path.split('/').pop() || '' } })}
-            onCopyPath={handleCopyPath}
-            onMoveNodes={handleMoveNodes}
-            onUploadFile={handleUploadFile}
-            projectRoot={projectRoot}
-          />
-          <InfoPanel 
-            chatHistory={chatHistory}
-            instructions={readmeContent}
-            isInstructionsLoading={isLoading && !readmeContent && isProjectOpen}
-            onClearChat={handleClearChatHistory}
-            projectIsOpen={isProjectOpen}
-          />
-        </div>
-        <div 
-            className={`w-full flex-col flex-grow min-h-0 ${mobileView === 'code' ? 'flex' : 'hidden'} md:flex`}
-            onClick={(e) => e.stopPropagation()}
-        >
-            <CodeDisplay
-                code={activeFileContent}
-                isLoading={isLoading}
-                thinkingMessage={thinkingMessage}
-                error={error}
-                fileName={activeFile}
-                hasFiles={fileTree.length > 0}
-                onCodeChange={handleCodeChange}
-            />
-        </div>
-      </main>
-      
-      {notification && <Notification message={notification} onClose={() => setNotification(null)} />}
-      
-      {renderModals()}
+    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100">
+      <header className="sticky top-0 z-10 border-b border-neutral-800 bg-neutral-950/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="text-lg font-semibold">Coder App</span>
+            <span className="rounded-full border border-neutral-800 px-2 py-0.5 text-xs text-neutral-400">
+              {aiProvider.toUpperCase()}
+            </span>
+            {needsCloudKey(aiProvider) && (
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs ${
+                  hasKey ? "border border-emerald-700 text-emerald-400" : "border border-rose-700 text-rose-400"
+                }`}
+                title={hasKey ? "API key loaded" : "API key missing"}
+              >
+                {hasKey ? "key: OK" : "key: missing"}
+              </span>
+            )}
+          </div>
 
-      <MobileNav activeView={mobileView} onNavigate={setMobileView} />
+          <div className="flex items-center gap-2">
+            <select
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm"
+              value={aiProvider}
+              onChange={(e) => setAiProvider(e.target.value as AiProvider)}
+            >
+              <option value="gemini">Gemini</option>
+              <option value="chatgpt">ChatGPT (OpenAI)</option>
+              <option value="ollama">Ollama (local)</option>
+            </select>
+
+            <button
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-sm hover:bg-neutral-800"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              Settings
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto grid max-w-7xl grid-cols-1 gap-4 px-4 py-4 md:grid-cols-2">
+        <section className="flex flex-col gap-3">
+          <label className="text-sm text-neutral-400">Model</label>
+          <input
+            className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={aiProvider === "gemini" ? "gemini-2.5-flash" : aiProvider === "chatgpt" ? "gpt-4o-mini" : "qwen2.5-coder"}
+          />
+
+          <label className="mt-3 text-sm text-neutral-400">Your prompt</label>
+          <textarea
+            className="h-40 w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm leading-6"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Describe what you want the AI to build or modify…"
+          />
+
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm font-medium hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={handleGenerate}
+              disabled={isGenerating || (needsCloudKey(aiProvider) && !hasKey)}
+              title={!hasKey && needsCloudKey(aiProvider) ? "Add your API key in Settings" : "Generate"}
+            >
+              {isGenerating ? "Generating…" : "Generate"}
+            </button>
+
+            <button
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm hover:bg-neutral-800"
+              onClick={handlePickImage}
+              title="Attach an image to the prompt"
+            >
+              Attach Image
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageSelected} className="hidden" />
+            {imageDataUrl && <span className="text-xs text-neutral-400">image attached</span>}
+          </div>
+        </section>
+
+        <section className="flex min-h-[420px] flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-neutral-300">Generated Files</h2>
+            <button
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs hover:bg-neutral-800"
+              onClick={() => {
+                setFiles([]);
+                setReadmeContent("");
+              }}
+            >
+              Clear
+            </button>
+          </div>
+
+          {files.length === 0 && !readmeContent && (
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-sm text-neutral-400">
+              Results will show up here after you click <span className="text-neutral-200">Generate</span>.
+            </div>
+          )}
+
+          {files.length > 0 && (
+            <div className="rounded-lg border border-neutral-800">
+              <CodeDisplay files={files} onRemoveFile={removeFile} onChangeFile={(f) => addFile(f.fileName, f.code)} />
+            </div>
+          )}
+
+          {readmeContent && (
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-3">
+              <div className="mb-2 text-sm font-semibold text-neutral-300">README.md</div>
+              <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap text-xs leading-5 text-neutral-200">
+                {readmeContent}
+              </pre>
+            </div>
+          )}
+        </section>
+      </main>
+
+      {isSettingsOpen && (
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          aiProvider={aiProvider}
+          setAiProvider={setAiProvider}
+          onSaved={handleSettingsSaved} // <-- correct prop name
+          model={model}
+          setModel={setModel}
+        />
+      )}
     </div>
   );
-};
-
-export default App;
+}

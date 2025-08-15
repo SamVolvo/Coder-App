@@ -59,13 +59,11 @@ export const sendMessage = async (
     }
 
 
-    const apiKey = await window.electronAPI.getChatgptApiKey();
+const apiKey = await window.electronAPI.getChatgptApiKey();
 
-    const apiKey = await window.electronAPI.getApiKey();
-
-    if (!apiKey) {
-        throw new Error("API key is not set. Please add it in Settings.");
-    }
+if (!apiKey) {
+  throw new Error("OpenAI API key is not set. Add it in Settings.");
+}
 
     const systemInstruction = `You are a world-class senior software engineer acting as a coding assistant.
 - The user will provide the context of their current project files, followed by their request. You MUST use this context to inform your response.
