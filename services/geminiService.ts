@@ -146,3 +146,36 @@ export const getChatHistory = async (): Promise<Content[] | null> => {
 export const endChatSession = () => {
   chat = null;
 };
+
+// Wrapper used by the React app to generate code using Gemini.
+export const generateCode = async ({
+  system,
+  prompt,
+  files,
+  imageDataUrl,
+}: {
+  system: string;
+  prompt: string;
+  files: CodeFile[];
+  imageDataUrl?: string;
+}): Promise<{ files: CodeFile[]; readmeContent: string }> => {
+  await initializeChat();
+
+  const projectContext = files
+    .map((f) => `File: ${f.fileName}\n${f.code}`)
+    .join('\n\n');
+
+  const parts: any[] = [
+    {
+      text: `${system}\n\n${projectContext}\n\nUSER REQUEST:\n${prompt}`,
+    },
+  ];
+
+  if (imageDataUrl) {
+    const base64 = imageDataUrl.split(',')[1] || imageDataUrl;
+    parts.push({ inlineData: { data: base64 } });
+  }
+
+  const content: Content = { role: 'user', parts };
+  return await sendMessage(content);
+};

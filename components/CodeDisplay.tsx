@@ -1,96 +1,71 @@
-import React, { useState, useEffect, useRef } from 'react';
-import LoadingSpinner from './LoadingSpinner';
-import { CopyIcon, CheckIcon, CodeIcon, ExclamationIcon } from './icons';
+import React, { useState, useEffect } from 'react';
+import type { CodeFile } from '../types';
 
 interface CodeDisplayProps {
-  code: string;
-  isLoading: boolean;
-  thinkingMessage: string;
-  error: string | null;
-  fileName: string | null;
-  hasFiles: boolean;
-  onCodeChange: (newCode: string) => void;
+  files: CodeFile[];
+  onRemoveFile: (fileName: string) => void;
+  onChangeFile: (file: CodeFile) => void;
 }
 
-const CodeDisplay: React.FC<CodeDisplayProps> = ({ code, isLoading, thinkingMessage, error, fileName, hasFiles, onCodeChange }) => {
-  const [isCopied, setIsCopied] = useState(false);
-  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+const CodeDisplay: React.FC<CodeDisplayProps> = ({ files, onRemoveFile, onChangeFile }) => {
+  const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    setIsCopied(false);
-  }, [fileName]);
+    if (files.length === 0) {
+      setActiveIndex(0);
+    } else if (activeIndex >= files.length) {
+      setActiveIndex(files.length - 1);
+    }
+  }, [files.length, activeIndex]);
 
-  useEffect(() => {
-    if (isCopied) {
-      const timer = setTimeout(() => setIsCopied(false), 2000);
-      return () => clearTimeout(timer);
+  if (files.length === 0) return null;
+
+  const safeIndex = Math.min(activeIndex, files.length - 1);
+  const activeFile = files[safeIndex];
+
+  const handleRemove = (index: number, fileName: string) => {
+    onRemoveFile(fileName);
+    if (index === safeIndex && files.length > 1) {
+      // Select previous file if possible
+      setActiveIndex(index > 0 ? index - 1 : 0);
+    } else if (files.length === 1) {
+      setActiveIndex(0);
     }
-  }, [isCopied]);
-  
-  const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onCodeChange(e.target.value);
-  };
-  
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400">
-          <LoadingSpinner />
-          <p className="mt-4 text-lg">{hasFiles ? "Updating project..." : "Generating Code..."}</p>
-          {thinkingMessage && <p className="mt-2 text-sm text-slate-500">{thinkingMessage}</p>}
-        </div>
-      );
-    }
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-red-400 p-4">
-          <ExclamationIcon className="w-16 h-16 mb-4" />
-          <p className="text-xl font-semibold mb-2">Error</p>
-          <p className="text-center">{error}</p>
-        </div>
-      );
-    }
-    if (!fileName) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-slate-400 p-4 text-center">
-          <CodeIcon className="w-24 h-24 mb-4" />
-          <p className="text-xl font-medium">
-            {hasFiles ? 'Select a file to view its content' : 'Open a project to get started'}
-          </p>
-        </div>
-      );
-    }
-    
-    return (
-      <textarea
-        ref={textAreaRef}
-        value={code}
-        onChange={handleCodeChange}
-        spellCheck="false"
-        autoCapitalize="off"
-        autoComplete="off"
-        autoCorrect="off"
-        className="w-full h-full flex-grow bg-transparent text-slate-200 resize-none focus:outline-none p-4 font-mono text-sm"
-      />
-    );
   };
 
   return (
-    <div className="bg-slate-900 rounded-lg shadow-lg flex-grow flex flex-col relative">
-        <div className="flex items-center justify-between bg-slate-800 px-4 py-2 border-b border-slate-700">
-            <span className="text-sm font-medium text-slate-400 truncate">{fileName || 'No file selected'}</span>
-            {code && !error && (
-                 <button onClick={() => { navigator.clipboard.writeText(code); setIsCopied(true); }}
-                    className="flex items-center text-sm px-3 py-1.5 rounded-md bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white transition-colors duration-200" >
-                    {isCopied ? <><CheckIcon className="w-4 h-4 mr-1.5 text-green-400" />Copied!</> : <><CopyIcon className="w-4 h-4 mr-1.5" />Copy</>}
-                </button>
-            )}
-        </div>
-        <div className="flex-grow relative min-h-0 flex flex-col">
-           {renderContent()}
-        </div>
+    <div className="flex h-full flex-col">
+      <div className="flex overflow-x-auto border-b border-neutral-800">
+        {files.map((f, i) => (
+          <div
+            key={f.fileName}
+            className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer whitespace-nowrap ${
+              i === safeIndex ? 'bg-neutral-800 text-neutral-200' : 'bg-neutral-900 text-neutral-400'
+            }`}
+            onClick={() => setActiveIndex(i)}
+          >
+            <span>{f.fileName}</span>
+            <button
+              className="text-neutral-500 hover:text-neutral-300"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemove(i, f.fileName);
+              }}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <textarea
+        className="flex-grow w-full resize-none bg-neutral-950 p-4 font-mono text-sm text-neutral-200 outline-none"
+        value={activeFile.code}
+        onChange={(e) => onChangeFile({ fileName: activeFile.fileName, code: e.target.value })}
+      />
     </div>
   );
 };
 
 export default CodeDisplay;
+
