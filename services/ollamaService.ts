@@ -88,3 +88,31 @@ export const sendMessage = async (
     console.log("[AI] Parsed Ollama response:", parsed);
     return parsed;
 };
+
+// Wrapper for the React app to generate code via the local Ollama backend.
+export const generateCode = async ({
+  system,
+  prompt,
+  files,
+  imageDataUrl,
+}: {
+  system: string;
+  prompt: string;
+  files: CodeFile[];
+  imageDataUrl?: string;
+}): Promise<{ files: CodeFile[]; readmeContent: string }> => {
+  const history: Content[] = [];
+  const projectContext = files
+    .map((f) => `File: ${f.fileName}\n${f.code}`)
+    .join('\n\n');
+
+  const parts: any[] = [{ text: `${system}\n\n${projectContext}\n\nUSER REQUEST:\n${prompt}` }];
+  if (imageDataUrl) {
+    const base64 = imageDataUrl.split(',')[1] || imageDataUrl;
+    parts.push({ inlineData: { data: base64 } });
+  }
+  const content: Content = { role: 'user', parts };
+
+  const config = await window.electronAPI.getOllamaConfig?.();
+  return await sendMessage(content, projectContext, history, config);
+};
