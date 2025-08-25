@@ -58,7 +58,7 @@ export const sendMessage = async (
 - You can analyze images provided by the user. If they provide a screenshot, use it as a strong visual reference for the UI you generate.
 - Your response MUST be a single, valid JSON object that strictly adheres to this schema: { "files": [{ "fileName": "...", "code": "..." }], "readmeContent": "..." }. Do not add any text or markdown before or after the JSON object.
 - CRITICAL: For each file, "fileName" MUST be the full, relative path including directories. For example: 'src/components/Button.tsx' or 'css/styles.css'. This is a mandatory requirement.
-- "code" must be the raw, complete code for that file.
+- "code" must be the raw, complete code for that file. It is imperative that you do not truncate code or provide incomplete snippets. The entire file content must be present.
 - "readmeContent" must be the full content for a README.md file, formatted as markdown, explaining how to set up and run the project.
 - When asked to update, you must respond with the FULL, updated code for ALL relevant files and an updated readmeContent in the same JSON format.`;
     
@@ -80,7 +80,39 @@ export const sendMessage = async (
     };
     messages.push(finalUserMessage);
 
+    console.log("[AI] Sending request to Ollama backend via IPC. Message count:", messages.length);
     const responseText = await window.electronAPI.invokeOllama({ config, messages });
+    console.log("[AI] Received raw response from Ollama backend via IPC. Length:", responseText?.length);
 
-    return parseOllamaResponse(responseText);
+    const parsed = parseOllamaResponse(responseText);
+    console.log("[AI] Parsed Ollama response:", parsed);
+    return parsed;
+};
+
+// Wrapper for the React app to generate code via the local Ollama backend.
+export const generateCode = async ({
+  system,
+  prompt,
+  files,
+  imageDataUrl,
+}: {
+  system: string;
+  prompt: string;
+  files: CodeFile[];
+  imageDataUrl?: string;
+}): Promise<{ files: CodeFile[]; readmeContent: string }> => {
+  const history: Content[] = [];
+  const projectContext = files
+    .map((f) => `File: ${f.fileName}\n${f.code}`)
+    .join('\n\n');
+
+  const parts: any[] = [{ text: `${system}\n\n${projectContext}\n\nUSER REQUEST:\n${prompt}` }];
+  if (imageDataUrl) {
+    const base64 = imageDataUrl.split(',')[1] || imageDataUrl;
+    parts.push({ inlineData: { data: base64 } });
+  }
+  const content: Content = { role: 'user', parts };
+
+  const config = await window.electronAPI.getOllamaConfig?.();
+  return await sendMessage(content, projectContext, history, config);
 };

@@ -14,6 +14,27 @@ declare global {
     SSR: boolean;
   }
 
+  /// <reference types="vite/client" />
+
+declare global {
+  interface Window {
+    electronAPI: {
+      // Keys
+      getGeminiApiKey: () => Promise<string | undefined>;
+      setGeminiApiKey: (key: string) => Promise<void>;
+      getChatgptApiKey: () => Promise<string | undefined>;
+      setChatgptApiKey: (key: string) => Promise<void>;
+
+      // (add other methods you actually expose here, e.g. sendFeedback, read/write files, etc.)
+      // sendFeedback?: (payload: any) => Promise<void>;
+      // getChatHistory?: () => Promise<any>;
+    };
+  }
+}
+
+export {};
+
+
   interface ImportMeta {
     readonly env: ImportMetaEnv;
   }
@@ -21,8 +42,10 @@ declare global {
   interface Window {
     electronAPI: {
       // Settings
-      getApiKey: () => Promise<string | undefined>;
-      setApiKey: (key: string) => Promise<void>;
+      getGeminiApiKey: () => Promise<string | undefined>;
+      setGeminiApiKey: (key: string) => Promise<void>;
+      getChatgptApiKey: () => Promise<string | undefined>;
+      setChatgptApiKey: (key: string) => Promise<void>;
       getAiProvider: () => Promise<AiProvider>;
       setAiProvider: (provider: AiProvider) => Promise<void>;
       getOllamaConfig: () => Promise<OllamaConfig | undefined>;

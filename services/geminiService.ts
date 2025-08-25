@@ -7,7 +7,7 @@ let chat: Chat | null = null;
 async function getAiInstance(): Promise<GoogleGenAI> {
     if (ai) return ai;
     if (!window.electronAPI) throw new Error("Electron API not available.");
-    const apiKey = await window.electronAPI.getApiKey();
+    const apiKey = await window.electronAPI.getGeminiApiKey();
     if (!apiKey) throw new Error("API key is not set. Please add it in Settings.");
     ai = new GoogleGenAI({ apiKey });
     return ai;
@@ -67,26 +67,26 @@ export const parseAIResponse = (responseText: string | undefined): { files: Code
 
             if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
                 jsonString = jsonString.substring(jsonStart, jsonEnd + 1);
-            } else {
-                // If we can't find JSON, log the raw response for debugging and throw a clean error.
-                console.error("AI response did not contain a recognizable JSON object. Raw response:", responseText);
-                throw new Error("The AI returned a response that was not valid JSON. Please try again.");
             }
         }
     }
     
+    if (!jsonString.startsWith('{') || !jsonString.endsWith('}')) {
+        console.error("Could not find a valid JSON object in the AI response.", "Raw text:", responseText);
+        throw new Error("The AI returned a response that was not valid JSON. Please try again.");
+    }
+
     try {
         const parsed = JSON.parse(jsonString);
         
-        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.files) && typeof parsed.readmeContent === 'string') {
+        if (Array.isArray(parsed.files) && typeof parsed.readmeContent === 'string') {
             return parsed;
         }
         
-        console.error("Parsed JSON does not match the expected structure. Parsed object:", parsed, "Original raw text:", responseText);
-        throw new Error("The AI returned JSON with an unexpected structure. Please check the logs for details.");
+        throw new Error("Parsed JSON does not match the expected structure.");
 
     } catch (e) {
-        console.error("AI response parsing error:", e, "Raw text from AI:", responseText);
+        console.error("AI response parsing error:", e, "Extracted JSON string:", jsonString, "Original raw text:", responseText);
         throw new Error("The AI returned a response that was not valid JSON. Please try again.");
     }
 };
@@ -99,10 +99,9 @@ export const initializeChat = async (history: Content[] = []) => {
 - You can analyze images provided by the user. If they provide a screenshot, use it as a strong visual reference for the UI you generate.
 - Your response MUST be a JSON object that strictly adheres to this schema: { "files": [{ "fileName": "...", "code": "..." }], "readmeContent": "..." }.
 - CRITICAL: For each file, "fileName" MUST be the full, relative path including directories. For example: 'src/components/Button.tsx' or 'css/styles.css'. This is a mandatory requirement.
-- "code" must be the raw, complete code for that file.
+- "code" must be the raw, complete code for that file. It is imperative that you do not truncate code or provide incomplete snippets. The entire file content must be present.
 - "readmeContent" must be the full content for a README.md file, formatted as markdown, explaining how to set up and run the project.
-- When asked to update, you must respond with the FULL, updated code for ALL relevant files and an updated readmeContent in the same JSON format.
-- If you cannot fulfill the request with code (e.g., it's a general question), you MUST still respond in the required JSON format. In such cases, provide a helpful explanation in the \`readmeContent\` and an empty \`files\` array.`;
+- When asked to update, you must respond with the FULL, updated code for ALL relevant files and an updated readmeContent in the same JSON format.`;
 
     chat = aiInstance.chats.create({
         model: 'gemini-2.5-flash',
@@ -113,7 +112,8 @@ export const initializeChat = async (history: Content[] = []) => {
             temperature: 0.2,
             topP: 0.8,
             topK: 40,
-            thinkingConfig: { thinkingBudget: 0 },
+            maxOutputTokens: 8192,
+            thinkingConfig: { thinkingBudget: 2048 },
         },
         history: history,
     });
@@ -126,11 +126,16 @@ export const sendMessage = async (userContent: Content) => {
   if (!messageParts || messageParts.length === 0) {
     throw new Error("Cannot send an empty message.");
   }
+  console.log("[AI] Sending message to Gemini:", userContent);
   const response = await chat.sendMessage({ message: messageParts });
+  console.log("[AI] Received raw response from Gemini:", response);
   if (response.candidates?.[0]?.finishReason === 'SAFETY') {
+      console.warn("[AI] Gemini request blocked for safety reasons.");
       throw new Error("The request was blocked due to safety concerns. Please modify your prompt and try again.");
   }
-  return parseAIResponse(response.text);
+  const parsed = parseAIResponse(response.text);
+  console.log("[AI] Parsed Gemini response:", parsed);
+  return parsed;
 };
 
 export const getChatHistory = async (): Promise<Content[] | null> => {
@@ -140,4 +145,37 @@ export const getChatHistory = async (): Promise<Content[] | null> => {
 
 export const endChatSession = () => {
   chat = null;
+};
+
+// Wrapper used by the React app to generate code using Gemini.
+export const generateCode = async ({
+  system,
+  prompt,
+  files,
+  imageDataUrl,
+}: {
+  system: string;
+  prompt: string;
+  files: CodeFile[];
+  imageDataUrl?: string;
+}): Promise<{ files: CodeFile[]; readmeContent: string }> => {
+  await initializeChat();
+
+  const projectContext = files
+    .map((f) => `File: ${f.fileName}\n${f.code}`)
+    .join('\n\n');
+
+  const parts: any[] = [
+    {
+      text: `${system}\n\n${projectContext}\n\nUSER REQUEST:\n${prompt}`,
+    },
+  ];
+
+  if (imageDataUrl) {
+    const base64 = imageDataUrl.split(',')[1] || imageDataUrl;
+    parts.push({ inlineData: { data: base64 } });
+  }
+
+  const content: Content = { role: 'user', parts };
+  return await sendMessage(content);
 };
